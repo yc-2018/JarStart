@@ -60,7 +60,7 @@
 ## 编译
 
 ```bat
-build.cmd
+build.cmd            :: 或直接跑 powershell -File build.ps1
 ```
 
 只依赖 Windows 自带的 .NET Framework 编译器：
@@ -70,11 +70,33 @@ build.cmd
 ```
 
 > 编译器只支持 **C# 5**，源码里不要用字符串内插、`nameof`、表达式体成员这些新语法。
+>
+> 真正的编译逻辑放在 `build.ps1`（UTF-8 带 BOM），`build.cmd` 只是个 ASCII 包装脚本——
+> 这样在英文区域设置的 CI runner 上也不会因为 ANSI 码页不同而解析失败。
 
 产物：
 
 - `JarStart.exe` — 主程序
-- `tests\SelfTest.exe` — 核心层自检（配置序列化、日志缓冲、java 解析、进程启停）
+- `tests\SelfTest.exe` — 核心层自检（配置序列化、日志缓冲、java 解析、端口识别、进程启停）
+- `tools\IsolatedUi.dll` — 界面自检用的辅助库
+
+## GitHub Actions
+
+| 工作流 | 触发 | 做什么 |
+| --- | --- | --- |
+| `.github/workflows/ci.yml` | 推送到 `main` / 提 PR / 手动 | 编译 + 跑核心自检 |
+| `.github/workflows/release.yml` | 推 `v*` tag / 手动触发 | 编译 + 自检 + 打包 zip（含 SHA256）+ 自动创建 Release |
+
+用法：
+
+```powershell
+git tag -a v0.2.0 -m "v0.2.0"
+git push origin v0.2.0        # 触发发布
+```
+
+也可以在 Actions 页面手动触发 `打包发布`，填版本号（留空则用 `v0.0.0-dev-<commit>`）。
+
+Release 里会有 `JarStart-<版本>.zip`（JarStart.exe + README）和对应的 `.sha256` 校验文件。
 
 ## 自检
 

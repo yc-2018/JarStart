@@ -1,0 +1,124 @@
+name: 打包发布
+
+# 打 v* 的 tag 自动发 Release；也可以在页面上手动触发并指定版本号
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '版本号，例如 v0.2.0；留空则用提交哈希生成'
+        required: false
+        default: ''
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 准备版本号
+        id: ver
+        shell: pwsh
+        run: |
+          $version = ''
+          if ("${{ github.event_name }}" -eq 'workflow_dispatch') {
+              $version = "${{ inputs.version }}"
+              if (-not $version) {
+                  $version = 'v0.0.0-dev-' + (git rev-parse --short HEAD)
+              }
+          }
+          else {
+              $version = "${{ github.ref_name }}"
+          }
+          Write-Host "版本号：$version"
+          "VERSION=$version" >> $env:GITHUB_OUTPUT
+
+      - name: 环境信息
+        shell: pwsh
+        run: |
+          Write-Host "JAVA_HOME: $env:JAVA_HOME"
+          java -version
+
+      - name: 编译
+        shell: pwsh
+        run: ./build.ps1
+
+      - name: 核心自检
+        shell: pwsh
+        run: |
+          ./tests/make-test-jar.ps1
+          ./tests/SelfTest.exe
+
+      - name: 打包
+        id: pack
+        shell: pwsh
+        run: |
+          $version = "${{ steps.ver.outputs.VERSION }}"
+          $dist = Join-Path $PWD 'dist'
+          New-Item -ItemType Directory -Path $dist -Force | Out-Null
+          $stage = Join-Path $dist "JarStart-$version"
+          if (Test-Path $stage) { Remove-Item $stage -Recurse -Force }
+          New-Item -ItemType Directory -Path $stage -Force | Out-Null
+
+          Copy-Item 'JarStart.exe' $stage
+          Copy-Item 'README.md' $stage
+
+          $zip = Join-Path $dist "JarStart-$version.zip"
+          if (Test-Path $zip) { Remove-Item $zip -Force }
+          Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $zip
+
+          $hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
+          "$hash  JarStart-$version.zip" | Out-File -FilePath "$zip.sha256" -Encoding ascii
+
+          Write-Host "产物：$zip"
+          "ASSET=$zip" >> $env:GITHUB_OUTPUT
+          "ASSET_HASH=$zip.sha256" >> $env:GITHUB_OUTPUT
+
+      - name: 发布 Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.ver.outputs.VERSION }}
+          ASSET: ${{ steps.pack.outputs.ASSET }}
+          ASSET_HASH: ${{ steps.pack.outputs.ASSET_HASH }}
+        run: |
+          # 手动触发时如果 tag 还不存在，就补一个并推上去
+          if ("${{ github.event_name }}" -eq 'workflow_dispatch') {
+              git config user.name 'github-actions[bot]'
+              git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+              git remote set-url origin "https://x-access-token:$env:GH_TOKEN@github.com/${{ github.repository }}.git"
+              if (-not (git tag -l $env:VERSION)) {
+                  git tag -a $env:VERSION -m "release $env:VERSION"
+                  git push origin $env:VERSION
+              }
+          }
+
+          $notes = @()
+          $notes += "Windows 版 jar 包启动器"
+          $notes += ''
+          $notes += '- 左侧管理 jar：添加 / 分组 / 启动 / 停止 / 移除'
+          $notes += '- 右侧实时显示选中 jar 的日志，stderr 标红，支持过滤与导出'
+          $notes += '- 自动识别启动端口，子进程随启动器一起结束，可缩到系统托盘'
+          $notes += ''
+          $notes += '### 更新内容'
+          $notes += (git log --pretty=format:'- %s' -n 20 $env:VERSION)
+          $text = $notes -join "`n"
+
+          if (gh release view $env:VERSION 2>$null) {
+              Write-Host 'Release 已存在，替换资产'
+              gh release upload $env:VERSION $env:ASSET $env:ASSET_HASH --clobber
+              gh release edit $env:VERSION --title "JarStart $env:VERSION" --notes $text
+          }
+          else {
+              gh release create $env:VERSION $env:ASSET $env:ASSET_HASH `
+                  --title "JarStart $env:VERSION" --notes $text --verify-tag
+          }
+          Write-Host "已发布：https://github.com/${{ github.repository }}/releases/tag/$env:VERSION"

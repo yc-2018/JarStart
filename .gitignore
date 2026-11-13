@@ -6,6 +6,7 @@
 *.ilk
 tests/classes/
 tests/hello.jar
+dist/
 
 # 运行期生成的东西
 *.log
