@@ -253,7 +253,7 @@ namespace JarStart
 
             // 打开就顺手检测一次，用户能立刻看到用的是哪个版本的 java
             if (!string.IsNullOrWhiteSpace(_item.JavaPath)) ProbeJava();
-            else _javaInfo.Text = "留空则使用系统环境变量里的 java（JAVA_HOME → PATH）";
+            else JavaProbe.ShowHint(_javaInfo, _javaTip);
         }
 
         private void BrowseFile()
@@ -296,30 +296,7 @@ namespace JarStart
 
         private void ProbeJava()
         {
-            string path = (_javaPath.Text ?? "").Trim();
-            if (path.Length == 0)
-            {
-                // 没填就用系统环境变量里的 java 试一下，好让用户看到实际用的是哪个版本
-                path = Environment.GetEnvironmentVariable("JAVA_HOME");
-                if (string.IsNullOrWhiteSpace(path)) path = "java";
-            }
-
-            string text = JdkResolver.ProbeVersion(path);
-            bool bad = text.StartsWith("检测失败") || text.StartsWith("路径无效");
-            if (bad)
-            {
-                _javaInfo.Text = "✖ " + text;
-                _javaInfo.ForeColor = Theme.Current.Danger;
-                if (_javaTip != null) _javaTip.SetToolTip(_javaInfo, text);
-            }
-            else
-            {
-                string summary = JdkResolver.SummarizeVersion(text);
-                string where = string.IsNullOrWhiteSpace(_javaPath.Text) ? "（系统环境变量）" : "";
-                _javaInfo.Text = "✔ " + summary + where;
-                _javaInfo.ForeColor = Theme.Current.Success;
-                if (_javaTip != null) _javaTip.SetToolTip(_javaInfo, text);
-            }
+            JavaProbe.Apply(_javaInfo, _javaTip, _javaPath.Text);
         }
 
         private void CreateGroup()

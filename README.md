@@ -9,6 +9,8 @@
 
 ![深色模式](shots/31-dark.png)
 
+![设置](shots/82-settings.png)
+
 ## 功能
 
 | 左侧 | 右侧 |
@@ -22,7 +24,8 @@
 其它：
 
 - **Java 环境**：默认用系统环境里的 `java`（先找 `JAVA_HOME`，再找 PATH）；每个 jar 可以单独指定
-  JDK 目录或 `java.exe` 完整路径，对话框里点「检测」会执行 `java -version` 显示版本。
+  JDK 目录或 `java.exe` 完整路径，对话框里点「检测」会执行 `java -version` 显示版本；
+  全局设置里的「默认 Java」同样有「检测」按钮。
 - **日志只存在内存里**：每个 jar 保留最近 N 行（默认 3000，可在设置里改），重启启动器后清空；
   需要留档时用「导出」手动存成文件。
 - **单 jar 配置**：显示名、jar 路径、所属分组、Java 环境、JVM 参数、程序参数、工作目录、
@@ -117,6 +120,7 @@ src/
   AppConfig.cs         全局配置与 JSON 持久化
   LogStore.cs          每个 jar 的内存环形日志缓冲
   JdkResolver.cs       解析 java 路径、读版本号、扫描本机 JDK
+  JavaProbe.cs         「检测」按钮的共用逻辑（版本号显示 + tooltip）
   ProcessManager.cs    启停进程树、捕获 stdout/stderr、状态机
   PortDetector.cs      从启动日志里识别端口号
   JobGuard.cs          Job Object：让子进程跟着启动器一起结束
@@ -128,6 +132,7 @@ src/
   JarEditForm.cs       单个 jar 的配置对话框
   SettingsForm.cs      全局设置
   MainForm*.cs         主窗口（结构 / 布局 / 逻辑）
+  app.manifest         声明 PerMonitorV2 高 DPI 感知（由系统加载时生效）
 tests/                 测试 jar 脚本与核心自检
 tools/                 界面自检工具（隔离桌面 + 消息驱动，不抢鼠标）
 shots/                 界面截图

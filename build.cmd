@@ -15,7 +15,7 @@ if not exist "%CSC%" (
 echo 正在编译 主程序 …
 "%CSC%" -nologo -codepage:65001 -target:winexe -optimize+ -platform:anycpu ^
   -main:JarStart.Program ^
-  -out:"%~dp0JarStart.exe" ^
+  -out:"%~dp0JarStart.exe" -win32manifest:"%~dp0src\app.manifest" ^
   -r:System.dll -r:System.Core.dll -r:System.Drawing.dll -r:System.Windows.Forms.dll ^
   -r:System.Web.Extensions.dll ^
   "%~dp0src\*.cs"
@@ -29,7 +29,7 @@ if errorlevel 1 (
 echo 正在编译 自检程序 …
 "%CSC%" -nologo -codepage:65001 -target:exe -optimize+ -platform:anycpu ^
   -main:JarStart.SelfTest ^
-  -out:"%~dp0tests\SelfTest.exe" ^
+  -out:"%~dp0tests\SelfTest.exe" -win32manifest:"%~dp0src\app.manifest" ^
   -r:System.dll -r:System.Core.dll -r:System.Drawing.dll -r:System.Windows.Forms.dll ^
   -r:System.Web.Extensions.dll ^
   "%~dp0src\*.cs"

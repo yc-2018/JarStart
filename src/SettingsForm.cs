@@ -13,13 +13,15 @@ namespace JarStart
         private NumericUpDown _maxLines, _fontSize;
         private CheckBox _autoScroll, _stopOnExit;
         private CheckBox _minimizeToTray;
+        private Label _javaInfo;
+        private ToolTip _javaTip;
 
         public SettingsForm(AppConfig cfg)
         {
             _cfg = cfg;
             FormBorderStyle = FormBorderStyle.FixedDialog;
             StartPosition = FormStartPosition.CenterParent;
-            ClientSize = Ui.Sz(470, 360);
+            ClientSize = Ui.Sz(470, 390);
             MaximizeBox = false;
             MinimizeBox = false;
             ShowInTaskbar = false;
@@ -63,17 +65,42 @@ namespace JarStart
             y += Ui.Px(34);
 
             _java = NewBox();
-            _java.SetBounds(Ui.Px(boxX), y - Ui.Px(3), Ui.Px(240), Ui.Px(24));
+            _java.SetBounds(Ui.Px(boxX), y - Ui.Px(3), Ui.Px(170), Ui.Px(24));
+            _java.TextChanged += delegate
+            {
+                // 路径改了，之前的版本信息就不作数了
+                if (_javaInfo == null) return;
+                _javaInfo.ForeColor = Theme.Current.SubText;
+                _javaInfo.Text = "点击「检测」查看该 java 的版本";
+            };
             AddLabel("默认 Java", Ui.Px(labelX), y);
             Controls.Add(_java);
             var browse = new FlatBtn();
             browse.Text = "浏览…";
             browse.Size = Ui.Sz(72, 26);
             browse.Font = new Font("Microsoft YaHei UI", 8.5f);
-            browse.SetBounds(Ui.Px(boxX) + Ui.Px(246), y - Ui.Px(4), Ui.Px(72), Ui.Px(26));
+            browse.SetBounds(Ui.Px(boxX) + Ui.Px(176), y - Ui.Px(4), Ui.Px(72), Ui.Px(26));
             browse.Click += delegate { BrowseJava(); };
             Controls.Add(browse);
-            y += Ui.Px(34);
+            var probe = new FlatBtn();
+            probe.Text = "检测";
+            probe.Size = Ui.Sz(62, 26);
+            probe.Font = new Font("Microsoft YaHei UI", 8.5f);
+            probe.SetBounds(Ui.Px(boxX) + Ui.Px(252), y - Ui.Px(4), Ui.Px(62), Ui.Px(26));
+            probe.Click += delegate { JavaProbe.Apply(_javaInfo, _javaTip, _java.Text); };
+            Controls.Add(probe);
+            y += Ui.Px(30);
+
+            // 版本信息单独一行，免得挤在右边显示不全
+            _javaInfo = new Label();
+            _javaInfo.Font = new Font("Microsoft YaHei UI", 8.5f);
+            _javaInfo.ForeColor = Theme.Current.SubText;
+            _javaInfo.AutoSize = false;
+            _javaInfo.SetBounds(Ui.Px(boxX), y - Ui.Px(2), Ui.Px(300), Ui.Px(20));
+            _javaInfo.TextAlign = ContentAlignment.MiddleLeft;
+            Controls.Add(_javaInfo);
+            _javaTip = new ToolTip();
+            y += Ui.Px(24);
 
             _maxLines = new NumericUpDown();
             _maxLines.Minimum = 200;
@@ -201,6 +228,12 @@ namespace JarStart
             _autoScroll.Checked = _cfg.AutoScroll;
             _stopOnExit.Checked = _cfg.StopAllOnExit;
             _minimizeToTray.Checked = _cfg.MinimizeToTray;
+
+            // 有默认 JDK 就顺手检测一次，一眼看出用的是哪个版本
+            if (!string.IsNullOrWhiteSpace(_cfg.DefaultJavaPath))
+                JavaProbe.Apply(_javaInfo, _javaTip, _cfg.DefaultJavaPath);
+            else
+                JavaProbe.ShowHint(_javaInfo, _javaTip);
         }
 
         private void Save()
