@@ -1,4 +1,4 @@
-name: 打包发布
+﻿name: 打包发布
 
 # 打 v* 的 tag 自动发 Release；也可以在页面上手动触发并指定版本号
 on:
@@ -20,7 +20,7 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: 检出代码
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
