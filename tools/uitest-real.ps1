@@ -47,6 +47,7 @@ $cfg = @"
 "@
 [System.IO.File]::WriteAllText((Join-Path $dir 'config.json'), $cfg, (New-Object System.Text.UTF8Encoding($false)))
 [System.Environment]::SetEnvironmentVariable('JARSTART_CONFIG_DIR', $dir, 'Process')
+[System.Environment]::SetEnvironmentVariable('JARSTART_ALLOW_MULTI', '1', 'Process')
 [System.Environment]::SetEnvironmentVariable('JARSTART_NO_TRAY', '1', 'Process')
 [System.Environment]::SetEnvironmentVariable('JARSTART_NO_REPOSITION', '1', 'Process')
 
@@ -94,6 +95,8 @@ if ($btn) {
 $ui.Dispose()
 
 [System.Environment]::SetEnvironmentVariable('JARSTART_CONFIG_DIR', $null, 'Process')
+[System.Environment]::SetEnvironmentVariable('JARSTART_ALLOW_MULTI', '1', 'Process')
+[System.Environment]::SetEnvironmentVariable('JARSTART_ALLOW_MULTI', $null, 'Process')
 [System.Environment]::SetEnvironmentVariable('JARSTART_NO_TRAY', $null, 'Process')
 [System.Environment]::SetEnvironmentVariable('JARSTART_NO_REPOSITION', $null, 'Process')
 Remove-Item $dir -Recurse -Force -ErrorAction SilentlyContinue

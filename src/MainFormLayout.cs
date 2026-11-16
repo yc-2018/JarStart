@@ -22,8 +22,9 @@ namespace JarStart
             _bar.SetBounds(0, 0, w, BarHeight);
             _title.SetBounds(Ui.Px(18), 0, Math.Min(Ui.Px(320), w - Ui.Px(200)), BarHeight);
             _btnClose.SetBounds(right - Ui.Px(46), Ui.Px(7), Ui.Px(32), Ui.Px(28));
-            _btnMin.SetBounds(right - Ui.Px(86), Ui.Px(7), Ui.Px(32), Ui.Px(28));
-            _btnSettings.SetBounds(right - Ui.Px(126), Ui.Px(7), Ui.Px(32), Ui.Px(28));
+            _btnMax.SetBounds(right - Ui.Px(86), Ui.Px(7), Ui.Px(32), Ui.Px(28));
+            _btnMin.SetBounds(right - Ui.Px(126), Ui.Px(7), Ui.Px(32), Ui.Px(28));
+            _btnSettings.SetBounds(right - Ui.Px(166), Ui.Px(7), Ui.Px(32), Ui.Px(28));
 
             int contentTop = BarHeight;
             int contentBottom = h - FootHeight;
@@ -113,6 +114,7 @@ namespace JarStart
         protected override void OnPaint(PaintEventArgs e)
         {
             base.OnPaint(e);
+            if (_maximized) return;      // 最大化时不画圆角边框
             var g = e.Graphics;
             g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
             float inset = 0.5f * (float)Ui.Scale;
@@ -161,7 +163,11 @@ namespace JarStart
         /// <summary>无边框窗口的边缘缩放 + 标题栏拖动</summary>
         private int ResizeHitTest(Point p)
         {
-            int grip = Ui.Px(6);
+            // 最大化状态下不提供缩放
+            if (_maximized) return 1;
+
+            // 缩放热区做宽一点，不然很难拖到边
+            int grip = Ui.Px(8);
             bool l = p.X <= grip, r = p.X >= ClientSize.Width - grip;
             bool t = p.Y <= grip, b = p.Y >= ClientSize.Height - grip;
 

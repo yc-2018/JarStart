@@ -206,6 +206,13 @@ namespace JarStart
                     case "min":
                         g.DrawLine(p, cx - 5, cy, cx + 5, cy);
                         break;
+                    case "max":
+                        g.DrawRectangle(p, cx - 4.6f, cy - 4.6f, 9.2f, 9.2f);
+                        break;
+                    case "restore":
+                        g.DrawRectangle(p, cx - 5.2f, cy - 2.2f, 7.4f, 7.4f);
+                        g.DrawRectangle(p, cx - 2.2f, cy - 5.2f, 7.4f, 7.4f);
+                        break;
                     case "gear":
                         g.DrawLine(p, cx - 5.5f, cy - 3f, cx + 5.5f, cy - 3f);
                         g.DrawLine(p, cx - 5.5f, cy + 3f, cx + 5.5f, cy + 3f);

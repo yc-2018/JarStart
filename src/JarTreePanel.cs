@@ -376,6 +376,7 @@ namespace JarStart
             try { name = System.IO.Path.GetFileName(it.JarPath); } catch { }
 
             var rt = _pm != null ? _pm.Runtime(it.Id) : null;
+            string pid = (rt != null && rt.Pid > 0) ? " · PID " + rt.Pid : "";
             switch (status)
             {
                 case JarStatus.Starting:
@@ -383,10 +384,10 @@ namespace JarStart
                         string s = "启动中";
                         string el = rt != null ? rt.ElapsedText : "";
                         if (el.Length > 0) s += " · " + el;
-                        return s;
+                        return s + pid;
                     }
                 case JarStatus.Running:
-                    return "运行中";
+                    return "运行中" + pid;
                 case JarStatus.Failed: return "启动失败";
                 case JarStatus.Exited: return "已退出";
                 default: return name;

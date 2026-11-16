@@ -14,7 +14,7 @@ namespace JarStart
         // 标题栏
         private Panel _bar;
         private Label _title;
-        private IconBtn _btnSettings, _btnMin, _btnClose;
+        private IconBtn _btnSettings, _btnMin, _btnMax, _btnClose;
 
         // 左侧
         private Panel _leftBar;
@@ -38,6 +38,10 @@ namespace JarStart
         private bool _dragging;
         private int _dragStartX;
         private int _dragStartWidth;
+
+        private bool _maximized;                // 自己实现的"最大化"（按工作区摆，不盖任务栏）
+        private Rectangle _restoreBounds = Rectangle.Empty;
+        public int MaximizeToggleCount;        // 自检用：最大化切换次数
 
         private readonly System.Windows.Forms.Timer _saveTimer;
 
@@ -92,8 +96,7 @@ namespace JarStart
             _bar.MouseDown += Bar_MouseDown;
             _bar.DoubleClick += delegate
             {
-                WindowState = WindowState == FormWindowState.Maximized
-                    ? FormWindowState.Normal : FormWindowState.Maximized;
+                ToggleMaximize();
             };
             Controls.Add(_bar);
 
@@ -117,6 +120,12 @@ namespace JarStart
             _btnMin.SetTip("最小化");
             _btnMin.Click += delegate { WindowState = FormWindowState.Minimized; };
             _bar.Controls.Add(_btnMin);
+
+            _btnMax = new IconBtn();
+            _btnMax.Kind = "max";
+            _btnMax.SetTip("最大化");
+            _btnMax.Click += delegate { ToggleMaximize(); };
+            _bar.Controls.Add(_btnMax);
 
             _btnClose = new IconBtn();
             _btnClose.Kind = "close";

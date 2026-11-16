@@ -13,6 +13,9 @@ namespace JarStart
     {
         private static int _failed = 0;
 
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        private static extern bool PostMessage(IntPtr h, int msg, IntPtr wp, IntPtr lp);
+
         public static void Main(string[] args)
         {
             Console.OutputEncoding = Encoding.UTF8;
@@ -23,6 +26,7 @@ namespace JarStart
             TestJdkResolver();
             TestPortDetector();
             TestReadyDetector();
+            TestLogViewSelection();
             TestProcess(args.Length > 0 ? args[0] : null);
 
             Console.WriteLine(_failed == 0 ? "\n全部通过 ✅" : "\n失败 " + _failed + " 项 ❌");
@@ -120,7 +124,68 @@ namespace JarStart
                   "没有端口的行返回 0", null);
         }
 
+        private static void TestLogViewSelection()
+        {
+            Console.WriteLine("- 日志选择（字符级）");
+            try
+            {
+                var view = new LogView();
+                view.Size = new System.Drawing.Size(900, 400);
+                var lines = new List<LogLine>();
+                lines.Add(new LogLine(new DateTime(2026, 1, 1, 10, 0, 0), LogLevel.Out,
+                    "hello world this is a test line"));
+                view.SetLines(lines);
+
+                // 横坐标换算成字符下标：越靠右下标越大
+                int c1 = view.CharIndexAt(200f, 0);
+                int c2 = view.CharIndexAt(320f, 0);
+                Check(c2 > c1, "字符下标随横坐标增大", c1 + " -> " + c2);
+
+                view.SetSelection(0, c1, c2);
+                string sel = (view.GetSelectedText() ?? "").Trim();
+                string expect = "hello world this is a test line".Substring(c1, c2 - c1).Trim();
+                Check(sel.Length > 0, "能只选出片段", "'" + sel + "'");
+                Check(sel == expect, "选出来的内容正确",
+                      "c1=" + c1 + " c2=" + c2 + " 实际='" + sel + "' 期望='" + expect + "'");
+
+                // 整行选中时要带时间戳
+                view.SetSelection(0, 0, ("hello world this is a test line").Length);
+                string all = (view.GetSelectedText() ?? "");
+                Check(all.Contains("10:00:00"), "整行选中带时间戳", "'" + all.Trim() + "'");
+
+                // 模拟真实的鼠标按下-拖动-松开（同步发消息，行为和鼠标拖动一致）
+                IntPtr h = view.Handle;
+                view.SetSelection(0, 0, 0);
+                PostMessage(h, 0x0201, (IntPtr)1, (IntPtr)((5 << 16) | 200));   // 左键按下（第 0 行）
+                PostMessage(h, 0x0200, (IntPtr)1, (IntPtr)((5 << 16) | 300));   // 拖动
+                PostMessage(h, 0x0202, (IntPtr)0, (IntPtr)((5 << 16) | 300));   // 松开
+                System.Windows.Forms.Application.DoEvents();
+                string info = view.SelectionInfo;
+                Check(info != "0,0 -> 0,0" && info.IndexOf("->") > 0, "鼠标拖动能选中一段",
+                      "选区=" + info + " 内容='" + (view.GetSelectedText() ?? "").Trim() + "'");
+
+                // 先拖一次滚动条，再拖选：看看滚动条的拖动会不会把后续选择弄坏
+                view.SetSelection(0, 0, 0);
+                PostMessage(h, 0x0201, (IntPtr)1, (IntPtr)((350 << 16) | (view.Width - 6)));
+                PostMessage(h, 0x0200, (IntPtr)1, (IntPtr)((100 << 16) | (view.Width - 6)));
+                PostMessage(h, 0x0202, (IntPtr)0, (IntPtr)((100 << 16) | (view.Width - 6)));
+                System.Windows.Forms.Application.DoEvents();
+                PostMessage(h, 0x0201, (IntPtr)1, (IntPtr)((5 << 16) | 200));
+                PostMessage(h, 0x0200, (IntPtr)1, (IntPtr)((5 << 16) | 300));
+                PostMessage(h, 0x0202, (IntPtr)0, (IntPtr)((5 << 16) | 300));
+                System.Windows.Forms.Application.DoEvents();
+                string info2 = view.SelectionInfo;
+                Check(info2 != "0,0 -> 0,0" && info2.IndexOf("->") > 0, "拖过滚动条之后还能选中",
+                      "选区=" + info2 + " 内容='" + (view.GetSelectedText() ?? "").Trim() + "'");
+            }
+            catch (Exception ex)
+            {
+                Check(false, "日志选择自检", ex.Message);
+            }
+        }
+
         private static void TestReadyDetector()
+
         {
             Console.WriteLine("- 启动完成判定");
             Check(ReadyDetector.IsReady("Tomcat started on port 8081 (http) with context path '/fw'", ""),

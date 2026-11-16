@@ -19,13 +19,18 @@ namespace JarStart
         private readonly List<float> _widths = new List<float>();
         private int _scrollLine;
         private int _hOffset;
-        private int _selStart = -1;
-        private int _selEnd = -1;
+
+        // 选区按"字符"记：锚点 + 焦点，行列都是字符级，可以只框住一行里的几个字
+        private int _anchorLine = -1;
+        private int _anchorChar = -1;
+        private int _focusLine = -1;
+        private int _focusChar = -1;
+
         private bool _autoScroll = true;
 
         private bool _dragThumb;
         private bool _dragHThumb;
-        private int _dragStartScroll;
+        private bool _selecting;            // 正在用鼠标拖选（不依赖 e.Button）
         private int _dragStartOffset;
         private int _maxLines = 3000;
 
@@ -107,8 +112,10 @@ namespace JarStart
                     _widths.Add(MeasureWidth(l));
                 }
             }
-            _selStart = -1;
-            _selEnd = -1;
+            _anchorLine = -1;
+            _anchorChar = -1;
+            _focusLine = -1;
+            _focusChar = -1;
             ClampScroll();
             Invalidate();
         }
@@ -134,8 +141,10 @@ namespace JarStart
             _widths.Clear();
             _scrollLine = 0;
             _hOffset = 0;
-            _selStart = -1;
-            _selEnd = -1;
+            _anchorLine = -1;
+            _anchorChar = -1;
+            _focusLine = -1;
+            _focusChar = -1;
             Invalidate();
         }
 
@@ -147,16 +156,133 @@ namespace JarStart
             return sb.ToString();
         }
 
+        /// <summary>复制出来的选区文本：整行选中的带上时间戳，局部选中的只取文字部分</summary>
         public string GetSelectedText()
         {
-            if (_selStart < 0 || _selEnd < 0) return "";
-            int a = Math.Min(_selStart, _selEnd);
-            int b = Math.Max(_selStart, _selEnd);
+            int l1, c1, l2, c2;
+            NormalizeSel(out l1, out c1, out l2, out c2);
+            if (l1 < 0 || l2 < 0) return "";
+
             var sb = new System.Text.StringBuilder();
-            for (int i = a; i <= b && i < _lines.Count; i++)
-                sb.AppendLine(_lines[i].TimeText + "  " + _lines[i].Text);
+            for (int i = l1; i <= l2 && i < _lines.Count; i++)
+            {
+                string text = _lines[i].Text ?? "";
+                int s = (i == l1) ? Math.Min(c1, text.Length) : 0;
+                int e = (i == l2) ? Math.Min(c2, text.Length) : text.Length;
+                if (s < 0) s = 0;
+                if (e < 0) e = 0;
+                if (e < s) e = s;
+                bool whole = (s == 0 && e == text.Length);
+                if (whole) sb.Append(_lines[i].TimeText + "  ");
+                sb.AppendLine(text.Substring(s, e - s));
+            }
             return sb.ToString();
         }
+
+        /// <summary>把选区整理成"从小到大"的顺序</summary>
+        private void NormalizeSel(out int l1, out int c1, out int l2, out int c2)
+        {
+            l1 = _anchorLine; c1 = _anchorChar; l2 = _focusLine; c2 = _focusChar;
+            if (l1 < 0 || l2 < 0) { l1 = c1 = l2 = c2 = -1; return; }
+            if (l1 > l2 || (l1 == l2 && c1 > c2))
+            {
+                int tl = l1; int tc = c1;
+                l1 = l2; c1 = c2;
+                l2 = tl; c2 = tc;
+            }
+        }
+
+        private bool HasSelection { get { return _anchorLine >= 0 && _focusLine >= 0; } }
+
+        /// <summary>量一段文字的宽度</summary>
+        private float WidthOf(string s)
+        {
+            if (string.IsNullOrEmpty(s)) return 0;
+            try
+            {
+                using (var g = Graphics.FromHwnd(IntPtr.Zero))
+                    return g.MeasureString(s, Font).Width;
+            }
+            catch { return 0; }
+        }
+
+        /// <summary>把鼠标横坐标换算成这一行里的第几个字符</summary>
+        private int CharAt(float x, int line)
+        {
+            if (line < 0 || line >= _lines.Count) return 0;
+            string text = _lines[line].Text ?? "";
+            if (text.Length == 0) return 0;
+
+            float target = x - (TimeWidth - _hOffset);
+            if (target <= 0) return 0;
+
+            // 二分查找：宽度随字符数单调递增
+            int lo = 0, hi = text.Length;
+            try
+            {
+                using (var g = Graphics.FromHwnd(IntPtr.Zero))
+                {
+                    while (lo < hi)
+                    {
+                        int mid = (lo + hi + 1) / 2;
+                        if (g.MeasureString(text.Substring(0, mid), Font).Width <= target) lo = mid;
+                        else hi = mid - 1;
+                    }
+                }
+            }
+            catch { return 0; }
+            return lo;
+        }
+
+        /// <summary>算作"词"的字符（双击选词用）</summary>
+        private static bool IsWordChar(char c)
+        {
+            return char.IsLetterOrDigit(c) || c == '_' || c == '.' || c == '-'
+                || c == ':' || c == '/' || c == '@';
+        }
+
+        /// <summary>取某个位置所在的行号</summary>
+        private int LineAtRow(float y)
+        {
+            int row = (int)(y / Math.Max(1, RowHeight));
+            return _scrollLine + row;
+        }
+
+        // ——— 供自检使用 ———
+
+        /// <summary>横坐标换算成字符下标（自检用）</summary>
+        public int CharIndexAt(float x, int line) { return CharAt(x, line); }
+
+        /// <summary>直接设定选区（自检用）</summary>
+        public void SetSelection(int line, int startChar, int endChar)
+        {
+            _anchorLine = line; _anchorChar = startChar;
+            _focusLine = line; _focusChar = endChar;
+        }
+
+        /// <summary>当前选区描述（自检用）</summary>
+        public string SelectionInfo
+        {
+            get
+            {
+                int l1, c1, l2, c2;
+                NormalizeSel(out l1, out c1, out l2, out c2);
+                return l1 + "," + c1 + " -> " + l2 + "," + c2;
+            }
+        }
+
+        /// <summary>当前滚动到的行（自检用）</summary>
+        public int ScrollLine { get { return _scrollLine; } }
+
+        /// <summary>鼠标事件计数（自检用）</summary>
+        public int MouseDownCount { get; private set; }
+        public int MouseMoveCount { get; private set; }
+        public int MouseDoubleClickCount { get; private set; }
+
+        /// <summary>排版信息（自检用）</summary>
+        public int RowHeightPx { get { return RowHeight; } }
+        public int LineIndexAt(float y) { return LineAtRow(y); }
+        public int LineTotal { get { return _lines.Count; } }
 
         private float MeasureWidth(LogLine line)
         {
@@ -224,20 +350,8 @@ namespace JarStart
             int rows = VisibleRows;
             float timeW = TimeWidth;
 
-            // 选中区域背景
-            if (_selStart >= 0 && _selEnd >= 0)
-            {
-                int a = Math.Min(_selStart, _selEnd);
-                int b = Math.Max(_selStart, _selEnd);
-                int y1 = (a - _scrollLine) * rowH;
-                int y2 = (b - _scrollLine + 1) * rowH;
-                if (y2 > 0 && y1 < ContentHeight)
-                {
-                    var rect = new Rectangle(0, y1, Width - ScrollBarSize, y2 - y1);
-                    using (var selBrush = new SolidBrush(t.Dark ? Color.FromArgb(48, 62, 88) : Color.FromArgb(216, 230, 255)))
-                        g.FillRectangle(selBrush, rect);
-                }
-            }
+            // 选中区域背景（按字符范围，可以只框住一行里的几个字）
+            PaintSelection(g, rowH, timeW);
 
             int count = Math.Min(_lines.Count, _scrollLine + rows + 1);
             for (int i = _scrollLine; i < count; i++)
@@ -259,6 +373,35 @@ namespace JarStart
 
             DrawVerticalBar(g);
             DrawHorizontalBar(g);
+        }
+
+        /// <summary>按字符范围画选中高亮</summary>
+        private void PaintSelection(Graphics g, int rowH, float timeW)
+        {
+            int l1, c1, l2, c2;
+            NormalizeSel(out l1, out c1, out l2, out c2);
+            if (l1 < 0 || l2 < 0) return;
+
+            var t = Theme.Current;
+            using (var selBrush = new SolidBrush(t.Dark ? Color.FromArgb(48, 62, 88) : Color.FromArgb(216, 230, 255)))
+            {
+                int first = Math.Max(l1, _scrollLine);
+                int last = Math.Min(l2, _scrollLine + VisibleRows);
+                for (int i = first; i <= last; i++)
+                {
+                    string text = _lines[i].Text ?? "";
+                    int s = (i == l1) ? Math.Min(c1, text.Length) : 0;
+                    int e = (i == l2) ? Math.Min(c2, text.Length) : text.Length;
+                    if (e <= s) continue;
+
+                    float x1 = timeW - _hOffset + WidthOf(text.Substring(0, s));
+                    float x2 = timeW - _hOffset + WidthOf(text.Substring(0, e));
+                    int y = (i - _scrollLine) * rowH;
+                    if (y > ContentHeight) break;
+                    var rect = new RectangleF(x1, y, Math.Max(1f, x2 - x1), rowH);
+                    g.FillRectangle(selBrush, rect);
+                }
+            }
         }
 
         private void DrawVerticalBar(Graphics g)
@@ -305,6 +448,7 @@ namespace JarStart
         protected override void OnMouseDown(MouseEventArgs e)
         {
             base.OnMouseDown(e);
+            MouseDownCount++;
             Focus();
 
             int trackX = Width - ScrollBarSize;
@@ -363,19 +507,53 @@ namespace JarStart
                 return;
             }
 
-            // 正文：开始选择
-            int line = LineAt(e.Location);
+            // 正文：开始选择（按字符定位）
+            int line = LineAtRow(e.Location.Y);
             if (line >= 0 && line < _lines.Count)
             {
-                _selStart = line;
-                _selEnd = line;
+                int ch = CharAt(e.Location.X, line);
+                _anchorLine = line; _anchorChar = ch;
+                _focusLine = line; _focusChar = ch;
+                _selecting = true;
+                Capture = true;
                 Invalidate();
             }
+        }
+
+        protected override void OnMouseDoubleClick(MouseEventArgs e)
+        {
+            base.OnMouseDoubleClick(e);
+            MouseDoubleClickCount++;
+            if (e == null) return;
+            if (e.X >= Width - ScrollBarSize && e.Y >= Height - ScrollBarSize) return;
+
+            int line = LineAtRow(e.Location.Y);
+            if (line < 0 || line >= _lines.Count) return;
+            string text = _lines[line].Text ?? "";
+            int ch = CharAt(e.Location.X, line);
+            if (text.Length == 0) return;
+
+            // 双击选中一个"词"
+            int s = ch, e2 = ch;
+            if (ch >= text.Length) ch = text.Length - 1;
+            if (ch < 0) return;
+            if (!IsWordChar(text[ch])) { s = ch; e2 = ch + 1; }
+            else
+            {
+                s = ch; e2 = ch + 1;
+                while (s > 0 && IsWordChar(text[s - 1])) s--;
+                while (e2 < text.Length && IsWordChar(text[e2])) e2++;
+            }
+            _anchorLine = line; _anchorChar = s;
+            _focusLine = line; _focusChar = e2;
+            Invalidate();
         }
 
         protected override void OnMouseMove(MouseEventArgs e)
         {
             base.OnMouseMove(e);
+            MouseMoveCount++;
+            UpdateCursor(e);
 
             if (_dragThumb)
             {
@@ -409,14 +587,18 @@ namespace JarStart
                 return;
             }
 
-            if (e.Button == MouseButtons.Left && _selStart >= 0)
+            if (_selecting)
             {
-                int line = LineAt(e.Location);
+                // 不能靠 e.Button 判断：拖出控件再拖回来时按钮状态会丢，
+                // 这里自己记着"正在选择"的状态
+                int line = LineAtRow(e.Location.Y);
                 if (line >= 0 && line < _lines.Count)
                 {
-                    _selEnd = line;
+                    _focusLine = line;
+                    _focusChar = CharAt(e.Location.X, line);
                     Invalidate();
                 }
+                return;
             }
         }
 
@@ -425,7 +607,56 @@ namespace JarStart
             base.OnMouseUp(e);
             _dragThumb = false;
             _dragHThumb = false;
+            _selecting = false;
             if (Capture) Capture = false;
+        }
+
+        /// <summary>鼠标移到滚动条上时光标要变，别还是文本框那个竖线</summary>
+        protected override void OnMouseLeave(EventArgs e)
+        {
+            base.OnMouseLeave(e);
+            Cursor = Cursors.IBeam;
+        }
+
+        private void UpdateCursor(MouseEventArgs e)
+        {
+            int trackX = Width - ScrollBarSize;
+            int trackY = Height - ScrollBarSize;
+            bool overV = e.X >= trackX && e.Y < trackY;
+            bool overH = e.Y >= trackY && e.X < trackX;
+
+            if (overV || overH)
+            {
+                // 竖直滚动条上下、水平滚动条左右，光标要跟着变
+                Cursor = overV ? Cursors.SizeNS : Cursors.SizeWE;
+                return;
+            }
+
+            // 滑块上用手型，轨道上用箭头
+            if (overV && _lines.Count > VisibleRows)
+            {
+                float ratio = (float)VisibleRows / _lines.Count;
+                int thumbH = Math.Max(24, (int)(ContentHeight * ratio));
+                int maxScroll = Math.Max(1, _lines.Count - VisibleRows);
+                int thumbY = (int)((ContentHeight - thumbH) * ((float)_scrollLine / maxScroll));
+                Cursor = (e.Y >= thumbY && e.Y <= thumbY + thumbH) ? Cursors.Hand : Cursors.Default;
+                return;
+            }
+            if (overH)
+            {
+                float maxW = MaxContentWidth + TimeWidth;
+                int trackW = Width - ScrollBarSize;
+                int maxOffset = (int)Math.Max(0, maxW - trackW);
+                if (maxOffset > 0)
+                {
+                    float ratio = trackW / Math.Max(1f, maxW);
+                    int thumbW = Math.Max(24, (int)(trackW * ratio));
+                    int thumbX = (int)((trackW - thumbW) * ((float)_hOffset / maxOffset));
+                    Cursor = (e.X >= thumbX && e.X <= thumbX + thumbW) ? Cursors.Hand : Cursors.Default;
+                    return;
+                }
+            }
+            Cursor = Cursors.IBeam;
         }
 
         protected override void OnMouseCaptureChanged(EventArgs e)
@@ -435,6 +666,7 @@ namespace JarStart
             {
                 _dragThumb = false;
                 _dragHThumb = false;
+                _selecting = false;
             }
         }
 
@@ -500,8 +732,9 @@ namespace JarStart
                 case Keys.A:
                     if ((ModifierKeys & Keys.Control) != 0 && _lines.Count > 0)
                     {
-                        _selStart = 0;
-                        _selEnd = _lines.Count - 1;
+                        _anchorLine = 0; _anchorChar = 0;
+                        _focusLine = _lines.Count - 1;
+                        _focusChar = (_lines[_lines.Count - 1].Text ?? "").Length;
                         Invalidate();
                         e.Handled = true;
                     }

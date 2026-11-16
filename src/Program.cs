@@ -22,12 +22,21 @@ namespace JarStart
             Theme.Apply(cfg);
 
             bool created;
-            _mutex = new Mutex(true, MutexName, out created);
-            if (!created)
+            // 自动化测试时允许多开，免得测试实例被正在运行的正式实例挡掉
+            bool allowMulti = Environment.GetEnvironmentVariable("JARSTART_ALLOW_MULTI") == "1";
+            if (allowMulti)
             {
-                MessageBox.Show("JarStart 已经在运行了。", "JarStart",
-                    MessageBoxButtons.OK, MessageBoxIcon.Information);
-                return;
+                _mutex = new Mutex();
+            }
+            else
+            {
+                _mutex = new Mutex(true, MutexName, out created);
+                if (!created)
+                {
+                    MessageBox.Show("JarStart 已经在运行了。", "JarStart",
+                        MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return;
+                }
             }
 
             Application.ThreadException += delegate(object s, ThreadExceptionEventArgs e) { ReportCrash(e.Exception); };
@@ -42,7 +51,7 @@ namespace JarStart
             }
             finally
             {
-                try { _mutex.ReleaseMutex(); } catch { }
+                try { if (!allowMulti) _mutex.ReleaseMutex(); } catch { }
             }
         }
 

@@ -38,6 +38,13 @@ namespace JarStart
             try { DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, ref v, sizeof(int)); } catch { }
         }
 
+        /// <summary>窗口最大化时要去掉圆角，不然边缘会露白</summary>
+        public static void ApplySquareCorners(IntPtr hwnd)
+        {
+            int v = 1 /*DWMWCP_NONE*/;
+            try { DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, ref v, sizeof(int)); } catch { }
+        }
+
         public static void ApplyDarkTitleBar(IntPtr hwnd, bool dark)
         {
             int v = dark ? 1 : 0;

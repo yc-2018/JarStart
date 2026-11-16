@@ -469,6 +469,46 @@ namespace JarStart
 
         // ————————————————— 设置与拖放 —————————————————
 
+        /// <summary>最大化 / 还原。无边框窗口不能直接用 WindowState，
+        /// 否则会盖住任务栏，这里按工作区手动摆。</summary>
+        public void ToggleMaximize()
+        {
+            MaximizeToggleCount++;
+            if (_maximized)
+            {
+                _maximized = false;
+                if (_restoreBounds.Width > 0) Bounds = _restoreBounds;
+                _btnMax.Kind = "max";
+                _btnMax.SetTip("最大化");
+            }
+            else
+            {
+                _restoreBounds = Bounds;
+                var area = Screen.FromControl(this).WorkingArea;
+                _maximized = true;
+                Bounds = area;
+                _btnMax.Kind = "restore";
+                _btnMax.SetTip("还原");
+            }
+            ApplyWindowShape();
+            Relayout();
+        }
+
+        /// <summary>最大化时去掉圆角和边框，还原时加回来</summary>
+        private void ApplyWindowShape()
+        {
+            if (!IsHandleCreated) return;
+            if (_maximized)
+            {
+                Native.ApplySquareCorners(Handle);
+            }
+            else
+            {
+                Native.ApplyRoundCorners(Handle);
+            }
+            Invalidate(true);
+        }
+
         /// <summary>把"启动完成判定"相关的配置同步给进程管理器</summary>
         private void ApplyReadySettings()
         {
