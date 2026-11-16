@@ -1,4 +1,4 @@
-﻿# JarStart 一键编译
+# JarStart 一键编译
 # 只依赖 Windows 自带的 .NET Framework 编译器，无需安装任何 SDK
 # 编译器仅支持 C# 5，源码请勿使用字符串内插 / nameof / 表达式体成员等新语法
 #
@@ -33,10 +33,16 @@ try {
         $cscArgs += @('-r:System.dll', '-r:System.Core.dll', '-r:System.Drawing.dll',
                       '-r:System.Windows.Forms.dll', '-r:System.Web.Extensions.dll')
         if ($ExtraRefs) { $cscArgs += $ExtraRefs }
+        # 把程序图标打进 exe，保持单文件分发
+        if ($Target -ne 'library' -and (Test-Path $appIco)) {
+            $cscArgs += "-resource:$appIco,JarStart.app.ico"
+        }
         $cscArgs += $Sources
         & $csc @cscArgs
         if ($LASTEXITCODE -ne 0) { throw "编译失败：$Output" }
     }
+
+    $appIco = Join-Path $root 'assets\app.ico'
 
     Write-Host '正在编译 主程序 ...' -ForegroundColor Cyan
     Invoke-Csc -Output (Join-Path $root 'JarStart.exe') -Target 'winexe' `

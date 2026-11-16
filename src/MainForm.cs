@@ -62,7 +62,7 @@ namespace JarStart
             DoubleBuffered = true;
             KeyPreview = true;
             Text = "JarStart 启动器";
-            Icon = AppIcon.Get(Theme.Current.Dark);
+            Icon = AppIcon.Get(AppIcon.LargeIconSize());
 
             BuildUi();
             ApplyTheme();

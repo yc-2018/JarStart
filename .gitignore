@@ -7,6 +7,7 @@
 tests/classes/
 tests/hello.jar
 dist/
+assets/png/
 
 # 运行期生成的东西
 *.log

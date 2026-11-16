@@ -220,13 +220,6 @@ if ($main2) {
         $ui2.Click($maxBtn.Handle, [int]($maxBtn.Width / 2), [int]($maxBtn.Height / 2))
         Start-Sleep -Seconds 2
         $restored = Find-Window $ui2 '*JarStart*'
-        if ($restored -and $restored.Width -ge $maxed.Width) {
-            # 点一次有时会被当成双击，再点一次
-            Start-Sleep -Seconds 1
-            $ui2.Click($maxBtn.Handle, [int]($maxBtn.Width / 2), [int]($maxBtn.Height / 2))
-            Start-Sleep -Seconds 2
-            $restored = Find-Window $ui2 '*JarStart*'
-        }
         Write-Output "        还原后  : $($restored.X),$($restored.Y) $($restored.Width)x$($restored.Height)"
         Check ($null -ne $restored -and $restored.Width -lt $maxed.Width) '再点一次能还原窗口' "$($restored.Width) x $($restored.Height)"
 
@@ -278,11 +271,21 @@ for ($i = 0; $i -lt 20; $i++) {
 }
 Check ($null -ne $menu) '托盘菜单已弹出' ''
 if ($menu) {
-    $ui3.Key($menu.Handle, 0x23)   # End
-    $ui3.Key($menu.Handle, 0x0D)   # Enter
-    Start-Sleep -Seconds 3
-    $alive = $null -ne (Get-Process -Id $ui3.ProcessId -ErrorAction SilentlyContinue)
-    Check (-not $alive) '托盘菜单"退出"能真正退出程序' ''
+    # 菜单是定时反复弹出的，End 和 Enter 之间有可能被重弹把选中项重置，
+    # 所以这里反复尝试，直到进程真的退出
+    $exited = $false
+    for ($i = 0; $i -lt 12 -and -not $exited; $i++) {
+        $m = $null
+        foreach ($w in $ui3.TopWindows()) {
+            if ($w.ClassName -like '*Window.8*' -and $w.Visible) { $m = $w }
+        }
+        if (-not $m) { Start-Sleep -Milliseconds 300; continue }
+        $ui3.Key($m.Handle, 0x23)   # End
+        $ui3.Key($m.Handle, 0x0D)   # Enter
+        Start-Sleep -Milliseconds 800
+        $exited = $null -eq (Get-Process -Id $ui3.ProcessId -ErrorAction SilentlyContinue)
+    }
+    Check $exited '托盘菜单"退出"能真正退出程序' ''
 }
 $ui3.Dispose()
 

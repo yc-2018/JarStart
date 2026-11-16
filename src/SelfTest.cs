@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -26,6 +26,7 @@ namespace JarStart
             TestJdkResolver();
             TestPortDetector();
             TestReadyDetector();
+            TestJavaProbe();
             TestLogViewSelection();
             TestProcess(args.Length > 0 ? args[0] : null);
 
@@ -181,6 +182,31 @@ namespace JarStart
             catch (Exception ex)
             {
                 Check(false, "日志选择自检", ex.Message);
+            }
+        }
+
+        private static void TestJavaProbe()
+        {
+            Console.WriteLine("- java 探测");
+            try
+            {
+                var lbl = new System.Windows.Forms.Label();
+                lbl.AutoSize = false;
+                lbl.Width = 300;
+                var tip = new System.Windows.Forms.ToolTip();
+
+                JavaProbe.Apply(lbl, tip, "");
+                Check(lbl.Text.StartsWith("✔") || lbl.Text.StartsWith("✖"),
+                      "检测后标签有结果", "'" + lbl.Text + "'");
+                Check(!lbl.Text.StartsWith("✖"), "系统环境变量里的 java 能探测成功", "'" + lbl.Text + "'");
+
+                var lbl2 = new System.Windows.Forms.Label();
+                JavaProbe.Apply(lbl2, tip, @"D:\不存在的路径\bin");
+                Check(lbl2.Text.StartsWith("✖"), "无效路径要报错", "'" + lbl2.Text + "'");
+            }
+            catch (Exception ex)
+            {
+                Check(false, "java 探测自检", ex.GetType().Name + ": " + ex.Message);
             }
         }
 

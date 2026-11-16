@@ -45,6 +45,15 @@ namespace JarStart
             try { DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, ref v, sizeof(int)); } catch { }
         }
 
+        [DllImport("user32.dll", CharSet = CharSet.Unicode, EntryPoint = "SetPropW")]
+        private static extern bool SetPropW(IntPtr hwnd, string name, int value);
+
+        /// <summary>在窗口上挂一个整数值（自动化测试用来读内部状态）</summary>
+        public static void SetProp(IntPtr hwnd, string name, int value)
+        {
+            try { SetPropW(hwnd, name, value); } catch { }
+        }
+
         public static void ApplyDarkTitleBar(IntPtr hwnd, bool dark)
         {
             int v = dark ? 1 : 0;

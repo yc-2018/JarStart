@@ -49,7 +49,7 @@ namespace JarStart
             _menu.Items.Add(miExit);
 
             _icon = new NotifyIcon();
-            _icon.Icon = AppIcon.Get(Theme.Current.Dark);
+            _icon.Icon = AppIcon.Get(AppIcon.SmallIconSize());
             _icon.Text = "JarStart 启动器";
             _icon.ContextMenuStrip = _menu;
             // 自动化测试时可以不往系统托盘里放图标，避免在用户任务栏上留痕迹
@@ -66,7 +66,7 @@ namespace JarStart
         public void UpdateTheme()
         {
             if (_disposed) return;
-            try { _icon.Icon = AppIcon.Get(Theme.Current.Dark); }
+            try { _icon.Icon = AppIcon.Get(AppIcon.SmallIconSize()); }
             catch { }
         }
 

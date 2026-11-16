@@ -75,6 +75,21 @@
 | `↑` `↓` / `Enter` | 在列表中移动 / 启动 |
 | `Ctrl+A` / `Ctrl+C` | 日志全选 / 复制（日志区里） |
 
+## 程序图标
+
+图标源文件是 `assets/app.svg`（1024×1024 矢量稿），编译时用
+`tools\make-icon.ps1` 转成多尺寸 `assets/app.ico`（16/20/24/32/40/48/64/128/256，
+PNG 压缩，整个文件只有 10 KB），再通过 `csc /resource:` 嵌进 exe——
+**保持单文件分发**，运行时按当前 DPI 精确取对应尺寸那一帧。
+
+换图标只要三步：
+
+1. 把新的 svg 存成 `assets/app.svg`
+2. `powershell -File tools\make-icon.ps1`（用系统自带 Edge 的 headless 栅格化，不需要装任何东西）
+3. `build.cmd`
+
+任务栏、托盘、Alt+Tab 用的都是这张图；万一资源缺失会自动退回运行时绘制的版本。
+
 ## 编译
 
 ```bat
@@ -176,7 +191,8 @@ src/
   MainForm*.cs         主窗口（结构 / 布局 / 逻辑）
   app.manifest         声明 PerMonitorV2 高 DPI 感知（由系统加载时生效）
 tests/                 测试 jar 脚本与核心自检
-tools/                 界面自检工具（隔离桌面 + 消息驱动，不抢鼠标）
+tools/                 界面自检工具（隔离桌面 + 消息驱动，不抢鼠标）、图标生成脚本
+assets/                程序图标（app.svg 源文件 + app.ico）
 shots/                 界面截图
 ```
 

@@ -474,6 +474,7 @@ namespace JarStart
         public void ToggleMaximize()
         {
             MaximizeToggleCount++;
+            try { Native.SetProp(Handle, "JarStart.MaxToggleCount", MaximizeToggleCount); } catch { }
             if (_maximized)
             {
                 _maximized = false;

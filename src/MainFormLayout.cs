@@ -66,7 +66,7 @@ namespace JarStart
 
             BackColor = t.Bg;
             Text = "JarStart 启动器";
-            try { Icon = AppIcon.Get(t.Dark); } catch { }
+            try { Icon = AppIcon.Get(AppIcon.LargeIconSize()); } catch { }
 
             _bar.BackColor = t.Bg;
             _leftBar.BackColor = t.Bg;
