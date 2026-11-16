@@ -344,10 +344,14 @@ namespace JarStart
             float textRight = right - Ui.Px(6);
             if (textRight - textLeft < Ui.Px(40)) textRight = textLeft + Ui.Px(40);
 
-            // 主行：名字 + 端口（端口放主行，不会被下面的副行挤掉）
+            // 主行：名字 + 端口
+            // 端口右对齐固定占位，名字用剩下的空间（超出省略），
+            // 这样名字再长也不会把端口挤掉
             int mainPort = PortOf(it);
-            string mainText = it.DisplayName;
-            if (mainPort > 0) mainText += "  ·  端口 " + mainPort;
+            string portText = mainPort > 0 ? "端口 " + mainPort : "";
+            float portW = 0;
+            if (portText.Length > 0)
+                portW = g.MeasureString(portText, nameFont).Width + Ui.Px(10);
 
             using (var sf = new StringFormat(StringFormatFlags.NoWrap)
             {
@@ -355,8 +359,20 @@ namespace JarStart
                 FormatFlags = StringFormatFlags.NoWrap,
             })
             using (var b = new SolidBrush(t.Text))
-                g.DrawString(mainText, nameFont, b,
-                    new RectangleF(textLeft, y + Ui.Px(7), textRight - textLeft, Ui.Px(18)), sf);
+                g.DrawString(it.DisplayName, nameFont, b,
+                    new RectangleF(textLeft, y + Ui.Px(7), Math.Max(Ui.Px(20), textRight - portW - textLeft), Ui.Px(18)), sf);
+
+            if (portText.Length > 0)
+            {
+                using (var sf2 = new StringFormat(StringFormatFlags.NoWrap)
+                {
+                    Alignment = StringAlignment.Far,
+                    FormatFlags = StringFormatFlags.NoWrap,
+                })
+                using (var b = new SolidBrush(t.Accent))
+                    g.DrawString(portText, nameFont, b,
+                        new RectangleF(textRight - portW + Ui.Px(4), y + Ui.Px(7), portW - Ui.Px(4), Ui.Px(18)), sf2);
+            }
 
             string sub = SubText(it, status);
             using (var sf = new StringFormat(StringFormatFlags.NoWrap)

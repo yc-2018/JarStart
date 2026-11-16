@@ -53,7 +53,6 @@ namespace JarStart
         {
             try { SetPropW(hwnd, name, value); } catch { }
         }
-
         public static void ApplyDarkTitleBar(IntPtr hwnd, bool dark)
         {
             int v = dark ? 1 : 0;

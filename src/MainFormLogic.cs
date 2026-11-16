@@ -493,6 +493,12 @@ namespace JarStart
             }
             ApplyWindowShape();
             Relayout();
+            try
+            {
+                Native.SetProp(Handle, "JarStart.Maximized", _maximized ? 1 : 0);
+                Native.SetProp(Handle, "JarStart.MaxToggleCount", MaximizeToggleCount);
+            }
+            catch { }
         }
 
         /// <summary>最大化时去掉圆角和边框，还原时加回来</summary>

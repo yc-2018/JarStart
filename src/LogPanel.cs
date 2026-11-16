@@ -18,6 +18,8 @@ namespace JarStart
         private Label _path;
         private Label _status;
         private ToolTip _statusTip;
+        private Label _hint;                   // 操作失败之类的临时提示
+        private System.Windows.Forms.Timer _hintTimer;
         private FlatBtn _btnStart, _btnStop, _btnRestart, _btnClear, _btnCopy, _btnExport;
         private LineEdit _filter;
         private Card _card;
@@ -74,6 +76,17 @@ namespace JarStart
             _status.TextAlign = ContentAlignment.MiddleCenter;
             _statusTip = new ToolTip();
 
+            // 临时提示（比如剪贴板被占用）
+            _hint = new Label();
+            _hint.Font = new Font("Microsoft YaHei UI", 8.5f);
+            _hint.AutoSize = false;
+            _hint.ForeColor = Theme.Current.Danger;
+            _hint.TextAlign = ContentAlignment.MiddleCenter;
+            _hint.Visible = false;
+            _hintTimer = new System.Windows.Forms.Timer();
+            _hintTimer.Interval = 4000;
+            _hintTimer.Tick += delegate { _hintTimer.Stop(); _hint.Visible = false; };
+
             _btnStart = MakeBtn("启动", true, delegate { if (StartRequested != null) StartRequested(); });
             _btnStop = MakeBtn("停止", false, delegate { if (StopRequested != null) StopRequested(); });
             _btnRestart = MakeBtn("重启", false, delegate { if (RestartRequested != null) RestartRequested(); });
@@ -93,6 +106,7 @@ namespace JarStart
             head.Controls.Add(_btnClear);
             head.Controls.Add(_btnCopy);
             head.Controls.Add(_btnExport);
+            head.Controls.Add(_hint);
             head.Height = 54;
             Controls.Add(head);
 
@@ -158,6 +172,9 @@ namespace JarStart
             if (textRight - textLeft < Ui.Px(80)) textRight = textLeft + Ui.Px(80);
             _name.SetBounds(textLeft, Ui.Px(8), textRight - textLeft, Ui.Px(22));
             _path.SetBounds(textLeft, Ui.Px(30), textRight - textLeft, Ui.Px(16));
+
+            // 提示条盖在标题栏上（居中），不占额外空间
+            _hint.SetBounds(textLeft, Ui.Px(8), textRight - textLeft, Ui.Px(22));
 
             int filterY = Ui.Px(58);
             _filter.SetBounds(pad, filterY, Math.Max(Ui.Px(120), w - pad * 2), Ui.Px(30));
@@ -349,11 +366,43 @@ namespace JarStart
 
         private void CopyAll()
         {
+            var text = _view.GetSelectedText();
+            if (string.IsNullOrEmpty(text)) text = _view.GetAllText();
+            if (string.IsNullOrEmpty(text)) return;
+
+            // 记录一下复制了多长，自动化测试靠这个判断"只复制了一小段"（不依赖系统剪贴板）
             try
             {
-                var text = _view.GetSelectedText();
-                if (string.IsNullOrEmpty(text)) text = _view.GetAllText();
-                if (text.Length > 0) Clipboard.SetText(text);
+                var form = FindForm();
+                if (form != null) Native.SetProp(form.Handle, "JarStart.LastCopyLen", text.Length);
+            }
+            catch { }
+
+            // 剪贴板经常被别的程序短暂占用，重试几次
+            for (int i = 0; i < 5; i++)
+            {
+                try
+                {
+                    Clipboard.SetText(text);
+                    return;
+                }
+                catch
+                {
+                    System.Threading.Thread.Sleep(80);
+                }
+            }
+            ShowHint("复制失败：剪贴板被其它程序占用了，请稍后再试");
+        }
+
+        /// <summary>在日志面板上闪一条提示</summary>
+        private void ShowHint(string msg)
+        {
+            try
+            {
+                _hint.Text = msg;
+                _hint.Visible = true;
+                _hintTimer.Stop();
+                _hintTimer.Start();
             }
             catch { }
         }

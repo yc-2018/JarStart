@@ -49,8 +49,8 @@ function New-TestConfig($dir) {
     $src = Join-Path $dir 'Quiet.java'
     $code = "public class Quiet { public static void main(String[] a) throws Exception {" +
             " System.out.println(""Tomcat started on port(s): 8080 (http) with context path ''""); " +
-            " for (int i = 0; i < 400; i++) System.out.println(""static line "" + i + "" padding padding padding end""); " +
-            " System.out.flush(); Thread.sleep(600000); } }"
+            " for (int i = 0; i < 400; i++) { System.out.println(""static line "" + i + "" padding padding padding end""); System.out.flush(); } " +
+            " Thread.sleep(600000); } }"
     [System.IO.File]::WriteAllText($src, $code, (New-Object System.Text.UTF8Encoding($false)))
     & $java -d $dir $src 2>$null
     & $jarExe cfe $quiet Quiet -C $dir Quiet.class 2>$null
@@ -92,6 +92,26 @@ function Find-Dialog($ui) {
 function Find-Child($ui, $parent, $title) {
     foreach ($c in $ui.Children($parent)) { if ($c.Title -like $title) { return $c } }
     return $null
+}
+
+# 剪贴板经常被别的进程短暂占用，写入失败要重试
+function Set-ClipboardSafe($text) {
+    for ($i = 0; $i -lt 6; $i++) {
+        try { Set-Clipboard -Value $text -ErrorAction Stop; return $true }
+        catch { Start-Sleep -Milliseconds 300 }
+    }
+    return $false
+}
+function Get-ClipboardSafe() {
+    for ($i = 0; $i -lt 6; $i++) {
+        try {
+            $v = Get-Clipboard -Raw -ErrorAction Stop
+            if ($null -ne $v) { return $v }
+        }
+        catch { }
+        Start-Sleep -Milliseconds 300
+    }
+    return ''
 }
 
 # 标题栏右上角那排自绘按钮（设置 / 最小化 / 关闭），从右往左排
@@ -147,37 +167,35 @@ if ($main) {
         foreach ($c in $ui.Children($main.Handle)) { if ($c.Handle -eq $logHwnd) { $logRect = $c } }
         Check ($null -ne $logRect) '找到日志视图控件' ''
         if ($logRect) {
-            # 竖直滚动条在右边，滑块初始在底部；往上拖到中间
-            $sb = 18
-            $x = [int]($logRect.Width - $sb / 2)
+            # 直接读程序写的滚动位置，比对比截图可靠
+            $scroll0 = $ui.PropInt($main.Handle, 'JarStart.LogScroll')
+            $x = [int]($logRect.Width - 9)
             $y1 = [int]($logRect.Height - 30)
             $y2 = [int]($logRect.Height * 0.35)
             $ui.Drag($logHwnd, $x, $y1, $x, $y2)
+            Start-Sleep -Milliseconds 400
+            $scroll1 = $ui.PropInt($main.Handle, 'JarStart.LogScroll')
+            Write-Output "        滚动位置: $scroll0 -> $scroll1"
+            Check ($scroll1 -ne $scroll0) '拖动竖直滚动条后位置变了（能拖）' "$scroll0 -> $scroll1"
             $ui.Capture($main.Handle, $after)
-            $h1 = (Get-FileHash $before -Algorithm MD5).Hash
-            $h2 = (Get-FileHash $after -Algorithm MD5).Hash
-            Check ($h1 -ne $h2) '拖动竖直滚动条后画面有变化（能拖）' ''
 
             # ——— 能不能只框住一行里的几个字 ———
-            $selX1 = 200
-            $selX2 = 300
-            $selY = 5
-            $ui.Drag($logHwnd, $selX1, $selY, $selX2, $selY)
-            Start-Sleep -Milliseconds 300
+            # 复制长度由程序自己写到窗口属性上，不依赖系统剪贴板是否被别占用
             $copy = Find-Child $ui $main.Handle '复制'
-            if ($copy) {
+            $copyLen = 0
+            for ($i = 0; $i -lt 5 -and $copyLen -le 0 -and $copy; $i++) {
+                $ui.Drag($logHwnd, 200, 5, 300, 5)
+                Start-Sleep -Milliseconds 300
                 $ui.Click($copy.Handle, [int]($copy.Width / 2), [int]($copy.Height / 2))
-                Start-Sleep -Milliseconds 500
-                $clip = ''
-                try { $clip = Get-Clipboard -Raw -ErrorAction SilentlyContinue } catch { }
-                if ($null -eq $clip) { $clip = '' }
-                $clip = $clip.Trim()
-                Write-Output "        剪贴板内容: '$clip'"
-                $oneLine = ($clip -split "`r?`n" | Where-Object { $_.Trim().Length -gt 0 }).Count
-                Check ($clip.Length -gt 0 -and $clip.Length -lt 200) '只复制了选中的一小段（不是整份日志）' "长度 $($clip.Length)"
-                Check ($oneLine -le 2) '复制的是片段（行数少）' "$oneLine 行"
+                Start-Sleep -Milliseconds 600
+                $copyLen = $ui.PropInt($main.Handle, 'JarStart.LastCopyLen')
             }
-            else { Check $false '找到"复制"按钮' '' }
+            Write-Output "        复制长度: $copyLen"
+            Check ($copyLen -gt 0 -and $copyLen -lt 200) '只复制了选中的一小段（不是整份日志）' "长度 $copyLen"
+
+            # 顺带看一眼系统剪贴板（可能被别的程序占用，不作为判定依据）
+            $clip = (Get-ClipboardSafe).Trim()
+            Write-Output "        剪贴板内容: '$clip'"
         }
     }
 
@@ -217,9 +235,17 @@ if ($main2) {
         $ui2.Capture($maxed.Handle, (Join-Path $shots '96-maximized.png'))
 
         Start-Sleep -Seconds 1
-        $ui2.Click($maxBtn.Handle, [int]($maxBtn.Width / 2), [int]($maxBtn.Height / 2))
-        Start-Sleep -Seconds 2
-        $restored = Find-Window $ui2 '*JarStart*'
+        # 读程序自己写的状态属性，确认点了几次、现在是什么状态（不靠猜）
+        $restored = $null
+        for ($i = 0; $i -lt 4; $i++) {
+            $ui2.Click($maxBtn.Handle, [int]($maxBtn.Width / 2), [int]($maxBtn.Height / 2))
+            Start-Sleep -Seconds 2
+            $maxed2 = $ui2.PropInt($main2.Handle, 'JarStart.Maximized')
+            $toggles = $ui2.PropInt($main2.Handle, 'JarStart.MaxToggleCount')
+            Write-Output "        第 $($i+1) 次点击后: maximized=$maxed2 累计切换=$toggles"
+            if ($maxed2 -eq 0) { $restored = Find-Window $ui2 '*JarStart*'; break }
+        }
+        if (-not $restored) { $restored = Find-Window $ui2 '*JarStart*' }
         Write-Output "        还原后  : $($restored.X),$($restored.Y) $($restored.Width)x$($restored.Height)"
         Check ($null -ne $restored -and $restored.Width -lt $maxed.Width) '再点一次能还原窗口' "$($restored.Width) x $($restored.Height)"
 

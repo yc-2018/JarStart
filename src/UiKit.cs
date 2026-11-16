@@ -5,28 +5,58 @@ using System.Windows.Forms;
 
 namespace JarStart
 {
+    /// <summary>
+    /// 自绘按钮的点击处理。
+    ///
+    /// WinForms 自带的 Click 依赖鼠标捕获和它内部的 MousePressed 状态，
+    /// 遇到一些情况（比如窗口跨显示器后 DPI 变化、或者用消息模拟点击）就可能不触发。
+    /// 所以这里关掉 StandardClick，自己在"鼠标在按钮内松开"时抬起 Click，
+    /// 真实鼠标和消息模拟都能可靠响应。
+    /// </summary>
+    internal static class ClickHelper
+    {
+        /// <summary>在鼠标松开时判断要不要当成一次点击</summary>
+        public static bool ShouldClick(Control c, MouseEventArgs e)
+        {
+            if (e == null) return false;
+            if (e.Button != MouseButtons.Left) return false;
+            try { return c.ClientRectangle.Contains(e.Location); }
+            catch { return false; }
+        }
+    }
+
     /// <summary>扁平圆角按钮，支持主色实心、幽灵与危险三种样式</summary>
     public class FlatBtn : Control
     {
         public bool Primary;
         public bool Danger;
         public bool Compact;          // 小尺寸方形按钮
-        private bool _hover, _down;
+        private bool _hover, _down, _pressed;
 
         public FlatBtn()
         {
             SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer
                    | ControlStyles.ResizeRedraw | ControlStyles.UserPaint
                    | ControlStyles.SupportsTransparentBackColor, true);
+            SetStyle(ControlStyles.StandardClick, false);   // 点击由我们自己处理
             Cursor = Cursors.Hand;
             Size = new Size(78, 30);
             Font = new Font("Microsoft YaHei UI", 9f);
         }
 
         protected override void OnMouseEnter(EventArgs e) { _hover = true; Invalidate(); base.OnMouseEnter(e); }
-        protected override void OnMouseLeave(EventArgs e) { _hover = false; _down = false; Invalidate(); base.OnMouseLeave(e); }
-        protected override void OnMouseDown(MouseEventArgs e) { _down = true; Invalidate(); base.OnMouseDown(e); }
-        protected override void OnMouseUp(MouseEventArgs e) { _down = false; Invalidate(); base.OnMouseUp(e); }
+        protected override void OnMouseLeave(EventArgs e) { _hover = false; _down = false; base.OnMouseLeave(e); }
+        protected override void OnMouseDown(MouseEventArgs e)
+        {
+            _down = true; _pressed = true; Invalidate(); base.OnMouseDown(e);
+        }
+        protected override void OnMouseUp(MouseEventArgs e)
+        {
+            _down = false; Invalidate(); base.OnMouseUp(e);
+            bool fire = _pressed && ClickHelper.ShouldClick(this, e);
+            _pressed = false;
+            if (fire) OnClick(EventArgs.Empty);
+        }
         protected override void OnTextChanged(EventArgs e) { Invalidate(); base.OnTextChanged(e); }
         protected override void OnEnabledChanged(EventArgs e) { Invalidate(); base.OnEnabledChanged(e); }
 
@@ -111,6 +141,7 @@ namespace JarStart
         public string Kind = "close";      // close | min | gear | plus | trash | folder | play | stop | restart | copy | search | refresh | group | chevron
         public string Tip;
         private bool _hover, _down, _active;
+        private bool _pressed;
         private ToolTip _toolTip;
 
         public bool Active
@@ -129,6 +160,7 @@ namespace JarStart
             SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer
                    | ControlStyles.ResizeRedraw | ControlStyles.UserPaint
                    | ControlStyles.SupportsTransparentBackColor, true);
+            SetStyle(ControlStyles.StandardClick, false);   // 点击由我们自己处理
             Size = Ui.Sz(32, 28);
             Cursor = Cursors.Hand;
         }
@@ -164,9 +196,21 @@ namespace JarStart
         }
 
         protected override void OnMouseEnter(EventArgs e) { _hover = true; Invalidate(); base.OnMouseEnter(e); }
-        protected override void OnMouseLeave(EventArgs e) { _hover = false; _down = false; Invalidate(); base.OnMouseLeave(e); }
-        protected override void OnMouseDown(MouseEventArgs e) { _down = true; Invalidate(); base.OnMouseDown(e); }
-        protected override void OnMouseUp(MouseEventArgs e) { _down = false; Invalidate(); base.OnMouseUp(e); }
+        protected override void OnMouseLeave(EventArgs e) { _hover = false; _down = false; base.OnMouseLeave(e); }
+        protected override void OnMouseDown(MouseEventArgs e)
+        {
+            _down = true; _pressed = true; Invalidate(); base.OnMouseDown(e);
+        }
+
+        protected override void OnMouseUp(MouseEventArgs e)
+        {
+            _down = false; Invalidate(); base.OnMouseUp(e);
+
+            // 自己判定并抬起点击（框架自带的 Click 依赖鼠标捕获，不可靠）
+            bool fire = _pressed && ClickHelper.ShouldClick(this, e);
+            _pressed = false;
+            if (fire) OnClick(EventArgs.Empty);
+        }
 
         protected override void OnPaint(PaintEventArgs e)
         {

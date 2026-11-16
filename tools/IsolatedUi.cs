@@ -57,6 +57,8 @@ namespace IsolatedUi
         private static extern IntPtr WindowFromPoint(POINT p);
         [DllImport("user32.dll")]
         private static extern bool ClientToScreen(IntPtr hwnd, ref POINT p);
+        [DllImport("user32.dll", CharSet = CharSet.Unicode, EntryPoint = "GetPropW")]
+        private static extern IntPtr GetPropW(IntPtr hwnd, string name);
 
         [StructLayout(LayoutKind.Sequential)]
         private struct POINT { public int X, Y; }
@@ -195,6 +197,13 @@ namespace IsolatedUi
             Thread.Sleep(30);
             PostMessageW(hwnd, 0x0101 /*WM_KEYUP*/, (IntPtr)vk, IntPtr.Zero);
             Thread.Sleep(250);
+        }
+
+        /// <summary>读窗口上挂的整数值（自动化测试用来读内部状态）</summary>
+        public int PropInt(IntPtr hwnd, string name)
+        {
+            var v = GetPropW(hwnd, name);
+            return v.ToInt32();
         }
 
         /// <summary>给窗口发一条自定义消息</summary>

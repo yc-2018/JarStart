@@ -329,6 +329,20 @@ namespace JarStart
             int maxOffset = (int)Math.Max(0, maxW - (Width - ScrollBarSize));
             if (_hOffset > maxOffset) _hOffset = maxOffset;
             if (_hOffset < 0) _hOffset = 0;
+
+            PublishScroll();
+        }
+
+        /// <summary>把滚动位置写到窗口属性上，自动化测试用它确认滚动条真的动了</summary>
+        private void PublishScroll()
+        {
+            try
+            {
+                var form = FindForm();
+                if (form != null && form.IsHandleCreated)
+                    Native.SetProp(form.Handle, "JarStart.LogScroll", _scrollLine);
+            }
+            catch { }
         }
 
         protected override void OnResize(EventArgs e)
@@ -567,6 +581,7 @@ namespace JarStart
                 if (f > 1f) f = 1f;
                 _scrollLine = (int)Math.Round(f * maxScroll);
                 _autoScroll = false;
+                PublishScroll();
                 Invalidate();
                 return;
             }
