@@ -14,14 +14,18 @@ namespace JarStart
     /// </summary>
     public static class PortDetector
     {
+        // 注意：要用 ( \(s\) )? 这种写法让整个 "(s)" 可选。
+        // 写成 port\(s\)? 的话，问号只作用于右括号，等于要求日志里必须有 "(s"，
+        // Spring Boot 3.x 的 "Tomcat started on port 8081 (http)" 就永远匹配不上。
+        // 端口用命名组抓，以后往正则里加括号也不会把组号搞乱。
         private static readonly Regex RePortWord = new Regex(
-            @"port\(s\)?\s*[:=]?\s*(\d{2,5})\b", RegexOptions.IgnoreCase);
+            @"port(\(s\))?\s*[:=]?\s*(?<port>\d{2,5})\b", RegexOptions.IgnoreCase);
 
         private static readonly Regex RePortEq = new Regex(
-            @"\bport\s*[:=]\s*(\d{2,5})\b", RegexOptions.IgnoreCase);
+            @"\bport\s*[:=]\s*(?<port>\d{2,5})\b", RegexOptions.IgnoreCase);
 
         private static readonly Regex ReLocalUrl = new Regex(
-            @"https?://(?:localhost|127\.0\.0\.1|\[::1\])(?::(\d{2,5}))?",
+            @"https?://(?:localhost|127\.0\.0\.1|\[::1\])(?::(?<port>\d{2,5}))?",
             RegexOptions.IgnoreCase);
 
         /// <summary>从一行输出里解析端口，识别不到返回 0</summary>
@@ -42,10 +46,10 @@ namespace JarStart
 
             // "started at http://localhost:8080" 这种写法
             var m = ReLocalUrl.Match(line);
-            if (m.Success && startup && m.Groups[1].Success)
+            if (m.Success && startup && m.Groups["port"].Success)
             {
                 int p;
-                if (int.TryParse(m.Groups[1].Value, out p) && p > 0 && p < 65536) return p;
+                if (int.TryParse(m.Groups["port"].Value, out p) && p > 0 && p < 65536) return p;
             }
             return 0;
         }
@@ -55,7 +59,7 @@ namespace JarStart
             var m = re.Match(line);
             if (!m.Success) return 0;
             int p;
-            if (!int.TryParse(m.Groups[1].Value, out p)) return 0;
+            if (!int.TryParse(m.Groups["port"].Value, out p)) return 0;
             if (p <= 0 || p > 65535) return 0;
             return p;
         }

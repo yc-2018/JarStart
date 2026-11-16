@@ -11,6 +11,8 @@
 
 ![设置](shots/82-settings.png)
 
+![真实服务](shots/91-real-running.png)
+
 ## 功能
 
 | 左侧 | 右侧 |
@@ -36,6 +38,15 @@
 - **缩到托盘**：点窗口右上角的关闭只是缩到系统托盘（可在设置里关掉这个行为）。
   托盘图标双击恢复窗口，右键菜单里有「显示主窗口 / 启动全部 / 停止全部 / 设置… / 退出」。
   第一次缩到托盘时会弹个气泡告诉你怎么找回窗口、怎么真正退出。
+- **端口自动识别**：从启动日志里识别 Tomcat / Undertow / Netty 监听的端口，
+  同时兼容 Spring Boot 2.x（`port(s): 8080`）和 3.x（`on port 8081`）两种写法，
+  识别出来后在左侧主行显示 `fw · 端口 8081`。
+- **启动中 / 运行中分得清**：进程一起来只显示「启动中 01:23」（附已用时），
+  等日志里出现"服务已就绪"的标志行才转成「运行中」。
+  内置关键字覆盖了 `Tomcat started on port`、`Started Xxx in N seconds`、
+  `启动成功`、`is ready` 等常见写法；你们框架自己的标志行（比如 fw 的
+  `RocketMQ消息监听器注册完成`）可以在设置 →「启动完成关键字」里追加（逗号分隔）。
+  也可以设「启动超时（分钟）」，超时还没等到标志就按已启动处理（默认不限）。
 - **子进程跟着启动器活**：设置里勾上「退出时停止所有子进程（崩溃/被强杀也一起结束）」后，
   启动的 jar 会被登记进 Windows 的 Job Object——正常关窗口会先停掉它们，
   启动器崩溃或被任务管理器强杀时，Windows 也会顺手把它们一起结束，不会留下孤儿进程。
@@ -143,6 +154,8 @@ src/
   LogStore.cs          每个 jar 的内存环形日志缓冲
   JdkResolver.cs       解析 java 路径、读版本号、扫描本机 JDK
   JavaProbe.cs         「检测」按钮的共用逻辑（版本号显示 + tooltip）
+  ReadyDetector.cs     判断"服务已就绪"的关键字
+  Ansi.cs              去掉日志里的 ANSI 颜色转义序列
   ProcessManager.cs    启停进程树、捕获 stdout/stderr、状态机
   PortDetector.cs      从启动日志里识别端口号
   JobGuard.cs          Job Object：让子进程跟着启动器一起结束

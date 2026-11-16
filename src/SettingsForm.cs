@@ -15,13 +15,15 @@ namespace JarStart
         private CheckBox _minimizeToTray;
         private Label _javaInfo;
         private ToolTip _javaTip;
+        private TextBox _readyWords;
+        private NumericUpDown _startTimeout;
 
         public SettingsForm(AppConfig cfg)
         {
             _cfg = cfg;
             FormBorderStyle = FormBorderStyle.FixedDialog;
             StartPosition = FormStartPosition.CenterParent;
-            ClientSize = Ui.Sz(470, 390);
+            ClientSize = Ui.Sz(470, 470);
             MaximizeBox = false;
             MinimizeBox = false;
             ShowInTaskbar = false;
@@ -127,6 +129,31 @@ namespace JarStart
             Controls.Add(_fontSize);
             y += Ui.Px(34);
 
+            // —— 启动判定 ——
+            _readyWords = NewBox();
+            _readyWords.SetBounds(Ui.Px(boxX), y - Ui.Px(3), Ui.Px(230), Ui.Px(24));
+            AddLabel("启动完成关键字", Ui.Px(labelX), y);
+            Controls.Add(_readyWords);
+
+            _startTimeout = new NumericUpDown();
+            _startTimeout.Minimum = 0;
+            _startTimeout.Maximum = 600;
+            _startTimeout.Increment = 1;
+            _startTimeout.Font = new Font("Microsoft YaHei UI", 9f);
+            _startTimeout.SetBounds(Ui.Px(boxX) + Ui.Px(240), y - Ui.Px(3), Ui.Px(70), Ui.Px(24));
+            Controls.Add(_startTimeout);
+            y += Ui.Px(28);
+
+            var tip = new Label();
+            tip.Text = "日志里出现这些关键字才算启动完成（逗号分隔，留空用内置的）";
+            tip.ForeColor = Theme.Current.SubText;
+            tip.Font = new Font("Microsoft YaHei UI", 8f);
+            tip.AutoSize = false;
+            tip.SetBounds(Ui.Px(boxX), y, Ui.Px(310), Ui.Px(20));
+            tip.TextAlign = ContentAlignment.MiddleLeft;
+            Controls.Add(tip);
+            y += Ui.Px(30);
+
             _autoScroll = new CheckBox();
             _autoScroll.Text = "新日志自动滚动到底部";
             _autoScroll.FlatStyle = FlatStyle.Flat;
@@ -228,6 +255,8 @@ namespace JarStart
             _autoScroll.Checked = _cfg.AutoScroll;
             _stopOnExit.Checked = _cfg.StopAllOnExit;
             _minimizeToTray.Checked = _cfg.MinimizeToTray;
+            _readyWords.Text = _cfg.ReadyKeywords ?? "";
+            _startTimeout.Value = Math.Max(0, Math.Min(600, _cfg.StartupTimeoutMinutes));
 
             // 有默认 JDK 就顺手检测一次，一眼看出用的是哪个版本
             if (!string.IsNullOrWhiteSpace(_cfg.DefaultJavaPath))
@@ -254,6 +283,8 @@ namespace JarStart
             _cfg.AutoScroll = _autoScroll.Checked;
             _cfg.StopAllOnExit = _stopOnExit.Checked;
             _cfg.MinimizeToTray = _minimizeToTray.Checked;
+            _cfg.ReadyKeywords = (_readyWords.Text ?? "").Trim();
+            _cfg.StartupTimeoutMinutes = (int)_startTimeout.Value;
             DialogResult = DialogResult.OK;
             Close();
         }

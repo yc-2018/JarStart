@@ -53,6 +53,14 @@ namespace IsolatedUi
         [DllImport("kernel32.dll")]
         private static extern bool CloseHandle(IntPtr h);
 
+        [DllImport("user32.dll")]
+        private static extern IntPtr WindowFromPoint(POINT p);
+        [DllImport("user32.dll")]
+        private static extern bool ClientToScreen(IntPtr hwnd, ref POINT p);
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct POINT { public int X, Y; }
+
         [StructLayout(LayoutKind.Sequential)]
         public struct RECT { public int Left, Top, Right, Bottom; }
 
@@ -194,6 +202,35 @@ namespace IsolatedUi
         {
             PostMessageW(hwnd, msg, IntPtr.Zero, IntPtr.Zero);
             Thread.Sleep(400);
+        }
+
+        /// <summary>模拟按住左键拖动（全程用消息，不动真实鼠标）</summary>
+        public void Drag(IntPtr hwnd, int x1, int y1, int x2, int y2)
+        {
+            int lp1 = (y1 << 16) | (x1 & 0xFFFF);
+            int lp2 = (y2 << 16) | (x2 & 0xFFFF);
+            PostMessageW(hwnd, 0x0201 /*WM_LBUTTONDOWN*/, (IntPtr)1, (IntPtr)lp1);
+            Thread.Sleep(60);
+            // 分几步移动，模拟真实拖拽
+            for (int i = 1; i <= 5; i++)
+            {
+                int x = x1 + (x2 - x1) * i / 5;
+                int y = y1 + (y2 - y1) * i / 5;
+                int lp = (y << 16) | (x & 0xFFFF);
+                PostMessageW(hwnd, 0x0200 /*WM_MOUSEMOVE*/, (IntPtr)1, (IntPtr)lp);
+                Thread.Sleep(30);
+            }
+            PostMessageW(hwnd, 0x0202 /*WM_LBUTTONUP*/, (IntPtr)0, (IntPtr)lp2);
+            Thread.Sleep(400);
+        }
+
+        /// <summary>找出父窗口某个客户区坐标上最深的子窗口</summary>
+        public IntPtr WindowAtClient(IntPtr parent, int cx, int cy)
+        {
+            POINT p = new POINT();
+            p.X = cx; p.Y = cy;
+            ClientToScreen(parent, ref p);
+            return WindowFromPoint(p);
         }
 
         /// <summary>截窗口（PrintWindow，窗口在屏幕外/被遮挡都能截到）</summary>

@@ -28,6 +28,10 @@ namespace JarStart
         public bool TrayHintShown = false;        // 是否已经提示过"缩到托盘"了
         public string LastSelectedId = "";
 
+        // —— 启动判定 ——
+        public string ReadyKeywords = "";          // 自定义"服务已就绪"关键字（逗号分隔）
+        public int StartupTimeoutMinutes = 0;      // 启动超时（分钟），0 表示一直等着完成标志
+
         // —— 窗口 ——
         public int WinX = -1, WinY = -1, WinW = 1180, WinH = 720;
 

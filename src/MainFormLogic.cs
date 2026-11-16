@@ -469,6 +469,14 @@ namespace JarStart
 
         // ————————————————— 设置与拖放 —————————————————
 
+        /// <summary>把"启动完成判定"相关的配置同步给进程管理器</summary>
+        private void ApplyReadySettings()
+        {
+            if (_pm == null) return;
+            _pm.ReadyKeywords = _cfg.ReadyKeywords ?? "";
+            _pm.StartupTimeoutMinutes = _cfg.StartupTimeoutMinutes;
+        }
+
         private void OpenSettings()
         {
             using (var dlg = new SettingsForm(_cfg))
@@ -477,6 +485,7 @@ namespace JarStart
                 Theme.Apply(_cfg);
                 _log.SetMax(_cfg.MaxLogLines);
                 _pm.KillChildrenOnExit = _cfg.StopAllOnExit;
+                ApplyReadySettings();
                 ApplyTheme();
                 ScheduleSave();
             }
@@ -617,6 +626,20 @@ namespace JarStart
                 if (any) { _tree.Invalidate(); UpdateStatus(); }
             };
             timer.Start();
+
+            // 每秒刷新一次"启动中"的计时，并检查启动超时
+            ApplyReadySettings();
+            var tick = new System.Windows.Forms.Timer();
+            tick.Interval = 1000;
+            tick.Tick += delegate
+            {
+                _pm.CheckStartupTimeout();
+                if (!_pm.AnyStarting()) return;
+                _tree.Invalidate();
+                _logPanel.RefreshStatus();
+                UpdateStatus();
+            };
+            tick.Start();
         }
 
         private void EnsureOnScreen()

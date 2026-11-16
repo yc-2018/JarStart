@@ -17,7 +17,24 @@ namespace JarStart
         public string JavaPath = "";
         public bool StopRequested;
         public int Port;                    // 从启动日志里识别到的端口，0 表示还没识别出来
+        public bool Ready;                  // 是否已经检测到"启动完成"标志
+        public bool TimedOut;               // 超过启动超时仍没等到标志
+        public DateTime ReadyAt = DateTime.MinValue;
+        public string ReadyLine = "";       // 命中的那条标志行
         public Process Proc;
+
+        /// <summary>已经跑了多久（mm:ss）</summary>
+        public string ElapsedText
+        {
+            get
+            {
+                if (StartedAt == DateTime.MinValue) return "";
+                int s = (int)(DateTime.Now - StartedAt).TotalSeconds;
+                if (s < 0) s = 0;
+                if (s < 3600) return string.Format("{0:00}:{1:00}", s / 60, s % 60);
+                return string.Format("{0}:{1:00}", s / 3600, (s % 3600) / 60);
+            }
+        }
     }
 
     /// <summary>
@@ -41,6 +58,12 @@ namespace JarStart
         /// 启动器一死它们就被 Windows 一起带走。
         /// </summary>
         public bool KillChildrenOnExit = true;
+
+        /// <summary>用户自定义的"启动完成"关键字（逗号分隔）</summary>
+        public string ReadyKeywords = "";
+
+        /// <summary>启动超时（分钟）：超过这么久还没等到完成标志就按已启动处理，0 表示不限</summary>
+        public int StartupTimeoutMinutes = 0;
 
         public ProcessManager(LogStore log)
         {
@@ -143,11 +166,15 @@ namespace JarStart
             rt.Proc = proc;
             rt.Pid = proc.Id;
             rt.StartedAt = DateTime.Now;
-            rt.Status = JarStatus.Running;
+            // 进程起来了不代表服务能用了，先显示"启动中"，等日志里出现完成标志再转"运行中"
+            rt.Status = JarStatus.Starting;
             rt.ExitCode = -1;
             rt.Error = "";
             rt.StopRequested = false;
             rt.Port = 0;
+            rt.Ready = false;
+            rt.TimedOut = false;
+            rt.ReadyLine = "";
             Put(item.Id, rt);
 
             // 登记到 Job Object：启动器被强杀/崩溃时，子进程会被系统一起结束
@@ -165,14 +192,18 @@ namespace JarStart
             proc.OutputDataReceived += delegate(object sender, DataReceivedEventArgs e)
             {
                 if (e.Data == null) return;
-                _log.Append(jarId, LogLevel.Out, e.Data);
-                NotePort(jarId, e.Data);
+                string text = Ansi.Strip(e.Data);
+                _log.Append(jarId, LogLevel.Out, text);
+                NotePort(jarId, text);
+                NoteReady(jarId, text);
             };
             proc.ErrorDataReceived += delegate(object sender, DataReceivedEventArgs e)
             {
                 if (e.Data == null) return;
-                _log.Append(jarId, LogLevel.Err, e.Data);
-                NotePort(jarId, e.Data);
+                string text = Ansi.Strip(e.Data);
+                _log.Append(jarId, LogLevel.Err, text);
+                NotePort(jarId, text);
+                NoteReady(jarId, text);
             };
             proc.Exited += delegate { OnExited(jarId); };
             proc.EnableRaisingEvents = true;
@@ -260,6 +291,54 @@ namespace JarStart
             rt.Port = port;
             _log.AppendSys(jarId, "检测到端口：" + port);
             Raise(jarId);
+        }
+
+        /// <summary>看到"服务已就绪"的标志行，就把状态从"启动中"转成"运行中"</summary>
+        private void NoteReady(string jarId, string line)
+        {
+            JarRuntime rt = Runtime(jarId);
+            if (rt.Status != JarStatus.Starting) return;
+            if (!ReadyDetector.IsReady(line, ReadyKeywords)) return;
+
+            rt.Status = JarStatus.Running;
+            rt.Ready = true;
+            rt.ReadyAt = DateTime.Now;
+            rt.ReadyLine = line.Trim();
+            _log.AppendSys(jarId, "检测到启动完成标志：" + rt.ReadyLine);
+            Raise(jarId);
+        }
+
+        /// <summary>有没有正在启动中的 jar（界面用它决定要不要每秒刷新）</summary>
+        public bool AnyStarting()
+        {
+            lock (_sync)
+            {
+                foreach (var kv in _map)
+                    if (kv.Value.Status == JarStatus.Starting) return true;
+            }
+            return false;
+        }
+
+        /// <summary>检查启动超时：超过设定时间还没等到完成标志，就按"已启动"处理</summary>
+        public void CheckStartupTimeout()
+        {
+            if (StartupTimeoutMinutes <= 0) return;
+            List<string> ids;
+            lock (_sync) { ids = new List<string>(_map.Keys); }
+            foreach (var id in ids)
+            {
+                JarRuntime rt = Runtime(id);
+                if (rt.Status != JarStatus.Starting) continue;
+                if (rt.StartedAt == DateTime.MinValue) continue;
+                double min = (DateTime.Now - rt.StartedAt).TotalMinutes;
+                if (min < StartupTimeoutMinutes) continue;
+
+                rt.Status = JarStatus.Running;
+                rt.TimedOut = true;
+                _log.AppendSys(id, "启动已超过 " + StartupTimeoutMinutes
+                    + " 分钟仍未检测到启动完成标志，先按已启动处理");
+                Raise(id);
+            }
         }
 
         private void OnExited(string jarId)

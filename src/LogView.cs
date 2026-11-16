@@ -320,14 +320,16 @@ namespace JarStart
                 if (e.Y >= thumbY && e.Y <= thumbY + thumbH)
                 {
                     _dragThumb = true;
-                    _dragStartScroll = _scrollLine;
-                    _dragStartOffset = e.Y - thumbY;
+                    _dragStartOffset = e.Y - thumbY;   // 记住抓在滑块的哪个位置
+                    _autoScroll = false;
+                    Capture = true;
                 }
                 else
                 {
                     // 点击轨道：翻一页
                     bool below = e.Y > thumbY + thumbH;
                     _scrollLine = Math.Max(0, Math.Min(maxScroll, _scrollLine + (below ? VisibleRows : -VisibleRows)));
+                    _autoScroll = false;
                     Invalidate();
                 }
                 return;
@@ -336,8 +338,28 @@ namespace JarStart
             // 水平滚动条
             if (e.Y >= trackY && e.X < trackX)
             {
-                _dragHThumb = true;
-                _dragStartOffset = _hOffset;
+                float maxW = MaxContentWidth + TimeWidth;
+                int trackW = Width - ScrollBarSize;
+                int maxOffset = (int)Math.Max(0, maxW - trackW);
+                if (maxOffset > 0)
+                {
+                    float ratio = trackW / Math.Max(1f, maxW);
+                    int thumbW = Math.Max(24, (int)(trackW * ratio));
+                    int thumbX = (int)((trackW - thumbW) * ((float)_hOffset / maxOffset));
+                    if (e.X >= thumbX && e.X <= thumbX + thumbW)
+                    {
+                        _dragHThumb = true;
+                        _dragStartOffset = e.X - thumbX;   // 抓取偏移（原来错用了 _hOffset，一拖就跳到头）
+                        Capture = true;
+                    }
+                    else
+                    {
+                        // 点击轨道：左右翻一屏
+                        bool right = e.X > thumbX + thumbW;
+                        _hOffset = Math.Max(0, Math.Min(maxOffset, _hOffset + (right ? trackW : -trackW)));
+                        Invalidate();
+                    }
+                }
                 return;
             }
 
@@ -360,9 +382,13 @@ namespace JarStart
                 int maxScroll = Math.Max(1, _lines.Count - VisibleRows);
                 float ratio = (float)VisibleRows / _lines.Count;
                 int thumbH = Math.Max(24, (int)(ContentHeight * ratio));
-                int pos = e.Y - _dragStartOffset;
-                int scroll = (int)((pos / Math.Max(1, (ContentHeight - thumbH))) * maxScroll);
-                _scrollLine = Math.Max(0, Math.Min(maxScroll, scroll));
+                int travel = Math.Max(1, ContentHeight - thumbH);
+                // 必须用浮点除法：整数除法会让滑块一拖就直接跳到最底
+                float f = (e.Y - _dragStartOffset) / (float)travel;
+                if (f < 0f) f = 0f;
+                if (f > 1f) f = 1f;
+                _scrollLine = (int)Math.Round(f * maxScroll);
+                _autoScroll = false;
                 Invalidate();
                 return;
             }
@@ -374,9 +400,11 @@ namespace JarStart
                 int maxOffset = (int)Math.Max(0, maxW - trackW);
                 float ratio = (float)trackW / Math.Max(1f, maxW);
                 int thumbW = Math.Max(24, (int)(trackW * ratio));
-                int pos = e.X - _dragStartOffset;
-                int offset = (int)((pos / Math.Max(1, (trackW - thumbW))) * maxOffset);
-                _hOffset = Math.Max(0, Math.Min(maxOffset, offset));
+                int travel = Math.Max(1, trackW - thumbW);
+                float f = (e.X - _dragStartOffset) / (float)travel;
+                if (f < 0f) f = 0f;
+                if (f > 1f) f = 1f;
+                _hOffset = (int)Math.Round(f * maxOffset);
                 Invalidate();
                 return;
             }
@@ -397,6 +425,17 @@ namespace JarStart
             base.OnMouseUp(e);
             _dragThumb = false;
             _dragHThumb = false;
+            if (Capture) Capture = false;
+        }
+
+        protected override void OnMouseCaptureChanged(EventArgs e)
+        {
+            base.OnMouseCaptureChanged(e);
+            if (!Capture)
+            {
+                _dragThumb = false;
+                _dragHThumb = false;
+            }
         }
 
         protected override void OnMouseWheel(MouseEventArgs e)

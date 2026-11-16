@@ -150,7 +150,7 @@ namespace JarStart
             _btnStop.Location = new Point(_btnRestart.Left - _btnStop.Width - Ui.Px(4), btnY);
             _btnStart.Location = new Point(_btnStop.Left - _btnStart.Width - Ui.Px(4), btnY);
 
-            int statusW = Ui.Px(96);
+            int statusW = Ui.Px(130);
             _status.SetBounds(_btnStart.Left - statusW - Ui.Px(14), btnY + Ui.Px(3), statusW, Ui.Px(22));
 
             int textLeft = pad;
@@ -234,14 +234,30 @@ namespace JarStart
                 int.TryParse(item.Port.Trim(), out port);
 
             string text = JarStatusText.Describe(status);
-            if (status == JarStatus.Running)
+            if (status == JarStatus.Starting)
+            {
+                // 启动中：把已用时和端口都摆出来，免得以为已经起来了
+                text = "启动中";
+                string el = rt.ElapsedText;
+                if (el.Length > 0) text += " " + el;
+                if (port > 0) text += " · " + port;
+            }
+            else if (status == JarStatus.Running)
             {
                 if (port > 0) text = text + " · " + port;
                 else if (rt.Pid > 0) text = text + " " + rt.Pid;
+                if (rt.TimedOut) text += "（未见完成标志）";
             }
             _status.Text = text;
             string tip = "PID " + rt.Pid;
             if (port > 0) tip += " · 端口 " + port;
+            if (status == JarStatus.Starting)
+            {
+                tip = "还在启动中，已用 " + rt.ElapsedText + "\\n" + tip;
+                if (rt.StartedAt != DateTime.MinValue)
+                    tip += "\\n启动于 " + rt.StartedAt.ToString("HH:mm:ss");
+            }
+            if (rt.ReadyLine.Length > 0) tip += "\\n完成标志：" + rt.ReadyLine;
             _statusTip.SetToolTip(_status, tip);
             switch (status)
             {

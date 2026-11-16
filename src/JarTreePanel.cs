@@ -344,13 +344,18 @@ namespace JarStart
             float textRight = right - Ui.Px(6);
             if (textRight - textLeft < Ui.Px(40)) textRight = textLeft + Ui.Px(40);
 
+            // 主行：名字 + 端口（端口放主行，不会被下面的副行挤掉）
+            int mainPort = PortOf(it);
+            string mainText = it.DisplayName;
+            if (mainPort > 0) mainText += "  ·  端口 " + mainPort;
+
             using (var sf = new StringFormat(StringFormatFlags.NoWrap)
             {
                 Trimming = StringTrimming.EllipsisCharacter,
                 FormatFlags = StringFormatFlags.NoWrap,
             })
             using (var b = new SolidBrush(t.Text))
-                g.DrawString(it.DisplayName, nameFont, b,
+                g.DrawString(mainText, nameFont, b,
                     new RectangleF(textLeft, y + Ui.Px(7), textRight - textLeft, Ui.Px(18)), sf);
 
             string sub = SubText(it, status);
@@ -369,16 +374,23 @@ namespace JarStart
             if (!it.JarExists) return "文件不存在：" + it.JarPath;
             string name = "";
             try { name = System.IO.Path.GetFileName(it.JarPath); } catch { }
-            if (status == JarStatus.Running)
+
+            var rt = _pm != null ? _pm.Runtime(it.Id) : null;
+            switch (status)
             {
-                var rt = _pm.Runtime(it.Id);
-                string pid = rt.Pid > 0 ? " · PID " + rt.Pid : "";
-                string port = PortOf(it) > 0 ? " · 端口 " + PortOf(it) : "";
-                return name + pid + port;
+                case JarStatus.Starting:
+                    {
+                        string s = "启动中";
+                        string el = rt != null ? rt.ElapsedText : "";
+                        if (el.Length > 0) s += " · " + el;
+                        return s;
+                    }
+                case JarStatus.Running:
+                    return "运行中";
+                case JarStatus.Failed: return "启动失败";
+                case JarStatus.Exited: return "已退出";
+                default: return name;
             }
-            if (status == JarStatus.Failed) return name + " · 启动失败";
-            if (status == JarStatus.Exited) return name + " · 已退出";
-            return name;
         }
 
         /// <summary>端口：优先用启动日志里识别出来的，没有就用手动填的</summary>

@@ -22,6 +22,7 @@ namespace JarStart
             TestLogStore();
             TestJdkResolver();
             TestPortDetector();
+            TestReadyDetector();
             TestProcess(args.Length > 0 ? args[0] : null);
 
             Console.WriteLine(_failed == 0 ? "\n全部通过 ✅" : "\n失败 " + _failed + " 项 ❌");
@@ -108,10 +109,30 @@ namespace JarStart
                   "Netty started on port(s)", null);
             Check(PortDetector.Detect("Started application at http://localhost:8081") == 8081,
                   "started at http://localhost:8081", null);
+            // Spring Boot 3.x 的写法：Tomcat started on port 8081 (http) with context path '/fw'
+            Check(PortDetector.Detect("2026-11-16 15:03:34,222 [main,] INFO  o.s.boot.web.embedded.tomcat.TomcatWebServer:241 - Tomcat started on port 8081 (http) with context path '/fw'") == 8081,
+                  "Tomcat started on port 8081 (Spring Boot 3.x 写法)", null);
+            Check(PortDetector.Detect("Tomcat started on port 8081 (http)") == 8081,
+                  "Tomcat started on port 8081", null);
             Check(PortDetector.Detect("2024-01-01 10:00:00 INFO  连接池 port=0 已重置") == 0,
                   "普通日志里的 port 不误报", null);
             Check(PortDetector.Detect("Nacos started successfully in stand alone mode") == 0,
                   "没有端口的行返回 0", null);
+        }
+
+        private static void TestReadyDetector()
+        {
+            Console.WriteLine("- 启动完成判定");
+            Check(ReadyDetector.IsReady("Tomcat started on port 8081 (http) with context path '/fw'", ""),
+                  "Tomcat started on port 算就绪", null);
+            Check(ReadyDetector.IsReady("Started FwApplication in 82.123 seconds", ""),
+                  "Spring Boot 的 Started ... in N seconds", null);
+            Check(ReadyDetector.IsReady("RocketMQ消息监听器注册完成,共12个监听器", "RocketMQ消息监听器注册完成"),
+                  "自定义关键字（用户配置的）", null);
+            Check(!ReadyDetector.IsReady("Starting FwApplication using Java 17.0.8 with PID 123", ""),
+                  "刚启动那行不算就绪", null);
+            Check(ReadyDetector.IsReady("服务启动完成，共 12 个监听器", "启动完成"),
+                  "自定义关键字命中", null);
         }
 
         private static void TestProcess(string jarPath)
@@ -154,7 +175,21 @@ namespace JarStart
             bool sawHello = false;
             foreach (var l in lines) if (l.Text.IndexOf("hello-jarstart", StringComparison.OrdinalIgnoreCase) >= 0) sawHello = true;
             Check(sawHello, "捕获到子进程输出", "共 " + lines.Count + " 行");
-            Check(pm.StatusOf("selftest") == JarStatus.Running, "状态为运行中", pm.StatusOf("selftest").ToString());
+
+            // 进程一起来只是"启动中"，要等到日志里出现完成标志才算"运行中"
+            Check(pm.StatusOf("selftest") == JarStatus.Starting
+                  || pm.StatusOf("selftest") == JarStatus.Running,
+                  "刚启动时状态是启动中或运行中", pm.StatusOf("selftest").ToString());
+
+            // 注意：java 的 stdout 重定向到管道后是块缓冲的，
+            // 那几行可能要到进程退出才吐出来，所以这里等端口出现而不是等瞬时的状态
+            DateTime portDeadline = DateTime.Now.AddSeconds(30);
+            while (DateTime.Now < portDeadline && pm.Runtime("selftest").Port == 0)
+                Thread.Sleep(200);
+
+            var rt = pm.Runtime("selftest");
+            Check(rt.Port == 8080, "识别到端口 8080", rt.Port.ToString());
+            Check(rt.Ready, "识别到启动完成标志", rt.ReadyLine);
 
             pm.Stop("selftest", true);
             Thread.Sleep(1200);
@@ -190,6 +225,8 @@ namespace JarStart
                     "        System.out.println(\"hello-jarstart\");\n" +
                     "        System.out.println(\"args=\" + java.util.Arrays.toString(a));\n" +
                     "        System.err.println(\"some warning line\");\n" +
+                    "        System.out.println(\"Tomcat initialized with port(s): 8080 (http)\");\n" +
+                    "        System.out.println(\"Tomcat started on port(s): 8080 (http) with context path ''\");\n" +
                     "        for (int i = 0; i < 50; i++) {\n" +
                     "            System.out.println(\"tick \" + i);\n" +
                     "            Thread.sleep(200);\n" +

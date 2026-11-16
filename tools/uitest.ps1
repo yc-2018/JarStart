@@ -107,6 +107,30 @@ if ($main) {
         Check ($null -ne $status) 'jar 启动后状态变为运行中' ''
         if ($status) { Write-Output "        状态文字: $($status.Title)" }
         $ui.Capture($main.Handle, (Join-Path $shots '81-isolated-run.png'))
+
+        # ——— 日志滚动条能不能拖 ———
+        Start-Sleep -Seconds 4
+        $before = Join-Path $shots '93-scroll-before.png'
+        $after = Join-Path $shots '94-scroll-after.png'
+        $ui.Capture($main.Handle, $before)
+
+        # 找日志控件：客户区里点一下，取最深的子窗口
+        $logHwnd = $ui.WindowAtClient($main.Handle, [int]($main.Width * 0.55), [int]($main.Height * 0.6))
+        $logRect = $null
+        foreach ($c in $ui.Children($main.Handle)) { if ($c.Handle -eq $logHwnd) { $logRect = $c } }
+        Check ($null -ne $logRect) '找到日志视图控件' ''
+        if ($logRect) {
+            # 竖直滚动条在右边，滑块初始在底部；往上拖到中间
+            $sb = 18
+            $x = [int]($logRect.Width - $sb / 2)
+            $y1 = [int]($logRect.Height - 30)
+            $y2 = [int]($logRect.Height * 0.35)
+            $ui.Drag($logHwnd, $x, $y1, $x, $y2)
+            $ui.Capture($main.Handle, $after)
+            $h1 = (Get-FileHash $before -Algorithm MD5).Hash
+            $h2 = (Get-FileHash $after -Algorithm MD5).Hash
+            Check ($h1 -ne $h2) '拖动竖直滚动条后画面有变化（能拖）' ''
+        }
     }
 
     $topRow = Get-TitleButtons $ui $main
@@ -143,11 +167,20 @@ if ($main2) {
             Check ($null -ne $probe) '设置里有"检测"按钮' ''
             if ($probe) {
                 $ui2.Click($probe.Handle, [int]($probe.Width / 2), [int]($probe.Height / 2))
-                Start-Sleep -Seconds 2
+                # 探测要拉起一个 java 进程，冷启动可能慢一点，这里轮询等结果
                 $ver = $null
-                foreach ($c in $ui2.Children($dlg.Handle)) { if ($c.Title -like '*✔*') { $ver = $c } }
+                for ($i = 0; $i -lt 20; $i++) {
+                    Start-Sleep -Milliseconds 500
+                    foreach ($c in $ui2.Children($dlg.Handle)) { if ($c.Title -like '*✔*') { $ver = $c } }
+                    if ($ver) { break }
+                }
                 Check ($null -ne $ver) '检测后能显示 java 版本号' ''
                 if ($ver) { Write-Output "        版本显示: $($ver.Title)" }
+                else {
+                    foreach ($c in $ui2.Children($dlg.Handle)) {
+                        if ($c.Title -ne '') { Write-Output "          [$($c.Title)]" }
+                    }
+                }
                 $ui2.Capture($dlg.Handle, (Join-Path $shots '82-settings.png'))
             }
         }
